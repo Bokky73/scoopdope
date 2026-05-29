@@ -1,0 +1,92 @@
+{
+  "nav": {
+    "brand": "scoopdope",
+    "courses": "Cours",
+    "dashboard": "Tableau de bord",
+    "credentials": "Diplômes",
+    "profile": "Profil",
+    "login": "Connexion",
+    "logout": "Déconnexion",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "userMenu": "Menu utilisateur",
+    "switchLight": "Passer en mode clair",
+    "switchDark": "Passer en mode sombre",
+    "language": "Langue",
+    "siteNav": "Navigation du site",
+    "bookmarks": "Favoris"
+  },
+  "home": {
+    "title": "scoopdope",
+    "description": "Plateforme d'éducation blockchain sur le réseau Stellar. Gagnez des diplômes vérifiables en apprenant.",
+    "browseCourses": "Parcourir les cours",
+    "getStarted": "Commencer"
+  },
+  "courses": {
+    "title": "Cours",
+    "viewCourse": "Voir le cours →",
+    "viewCourseLabel": "Voir le cours : {title}",
+    "levels": {
+      "Beginner": "Débutant",
+      "Intermediate": "Intermédiaire",
+      "Advanced": "Avancé"
+    }
+  },
+  "credentials": {
+    "title": "Mes Diplômes",
+    "subtitle": "Certificats vérifiables sur la blockchain obtenus en complétant des cours.",
+    "loading": "Chargement des diplômes…",
+    "empty": "Aucun diplôme pour l'instant. Complétez un cours pour obtenir votre premier certificat !",
+    "issued": "Émis le : {date}",
+    "tx": "Tx : {hash}",
+    "verify": "Vérifier sur Stellar ↗",
+    "share": "Partager 🔗",
+    "completed": "Terminé"
+  },
+  "profile": {
+    "loading": "Chargement…",
+    "joined": "Inscrit le {date}",
+    "avatarAlt": "Avatar de {name}",
+    "editProfile": "Modifier le profil",
+    "username": "Nom d'utilisateur",
+    "bio": "Biographie",
+    "avatarUrl": "URL de l'avatar",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré ✓",
+    "saveChanges": "Enregistrer les modifications",
+    "loadError": "Échec du chargement du profil.",
+    "saveError": "Échec de l'enregistrement du profil.",
+    "usernameRequired": "Le nom d'utilisateur est requis.",
+    "retry": "Réessayer",
+    "usernameHint": "50 caractères maximum.",
+    "bioHint": "{count}/500 caractères.",
+    "avatarUrlHint": "Lien vers une image de profil."
+  },
+  "wallet": {
+    "title": "Portefeuille Stellar",
+    "linkedKey": "Clé publique liée",
+    "publicKeyLabel": "Clé publique Stellar : {key}",
+    "bstBalance": "Solde BST : {balance} BST",
+    "unlinkWallet": "Délier le portefeuille",
+    "description": "Liez votre portefeuille Freighter pour recevoir des diplômes et des tokens BST.",
+    "freighterMissing": "Freighter non détecté.",
+    "installFreighter": "Installer Freighter",
+    "connecting": "Connexion…",
+    "linkWallet": "Lier le portefeuille"
+  },
+  "bookmarks": {
+    "title": "Mes Favoris",
+    "empty": "Aucun favori pour l'instant.",
+    "browseCourses": "Parcourir les cours →"
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "navigation": "Navigation",
+    "search": "Rechercher",
+    "closeModal": "Fermer la fenêtre",
+    "showHelp": "Afficher l'aide",
+    "playPause": "Lecture / Pause",
+    "seekBack": "Reculer de 10s",
+    "seekForward": "Avancer de 10s"
+  }
+}

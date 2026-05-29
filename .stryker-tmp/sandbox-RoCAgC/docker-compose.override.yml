@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  backend:
+    volumes:
+      - ./apps/backend/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+    command: npm run start:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+

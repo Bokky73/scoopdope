@@ -43,6 +43,35 @@ jobs:
         run: npm run test:pact --workspace=apps/backend
         continue-on-error: true
 
+  backend-mutation-test:
+    name: Backend - Mutation Testing (Stryker)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run mutation tests
+        run: npm run test:mutation
+        continue-on-error: true
+
+      - name: Upload mutation test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-test-results
+          path: coverage/mutation/
+          retention-days: 30
+
   backend-integration-test:
     name: Backend - Integration Tests (PostgreSQL)
     runs-on: ubuntu-latest

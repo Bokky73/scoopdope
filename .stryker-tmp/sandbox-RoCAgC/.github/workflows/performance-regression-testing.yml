@@ -1,0 +1,332 @@
+name: Performance Regression Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+env:
+  K6_VERSION: 'latest'
+  BASELINE_BRANCH: 'main'
+
+jobs:
+  setup-baseline:
+    name: Setup Performance Baseline
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    outputs:
+      baseline-exists: ${{ steps.check.outputs.exists }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASELINE_BRANCH }}
+
+      - name: Check if baseline exists
+        id: check
+        run: |
+          if [ -f ".github/performance-baseline.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+  performance-tests:
+    name: Run Performance Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: Scoopdope_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build backend
+        run: npm run build --workspace=apps/backend
+        env:
+          NODE_ENV: production
+
+      - name: Start backend server
+        run: npm run start:prod --workspace=apps/backend &
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/Scoopdope_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-key
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
+        timeout-minutes: 2
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000/health; then
+              echo "✅ Backend is ready"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          echo "❌ Backend failed to start"
+          exit 1
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 performance tests
+        id: k6-test
+        run: |
+          mkdir -p performance-results
+          
+          k6 run \
+            --out json=performance-results/results.json \
+            --summary-export=performance-results/summary.json \
+            scripts/load-tests/performance-regression.js
+        env:
+          API_URL: http://localhost:3000
+        continue-on-error: true
+
+      - name: Parse k6 results
+        id: parse-results
+        run: |
+          node scripts/parse-k6-results.js performance-results/summary.json > performance-results/parsed.json
+          cat performance-results/parsed.json
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results-${{ github.run_id }}
+          path: performance-results/
+          retention-days: 30
+
+  compare-with-baseline:
+    name: Compare with Baseline
+    runs-on: ubuntu-latest
+    needs: performance-tests
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download current results
+        uses: actions/download-artifact@v4
+        with:
+          name: performance-results-${{ github.run_id }}
+          path: current-results/
+
+      - name: Download baseline results
+        uses: actions/download-artifact@v4
+        with:
+          path: baseline-results/
+        continue-on-error: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Compare performance metrics
+        id: compare
+        run: |
+          node scripts/compare-performance.js \
+            current-results/parsed.json \
+            baseline-results/performance-results-baseline/parsed.json \
+            > performance-comparison.json
+          
+          cat performance-comparison.json
+
+      - name: Check for regressions
+        id: regression-check
+        run: |
+          node -e "
+            const comparison = require('./performance-comparison.json');
+            let hasRegressions = false;
+            let regressionDetails = '';
+            
+            Object.entries(comparison.metrics).forEach(([metric, data]) => {
+              const regression = ((data.current - data.baseline) / data.baseline) * 100;
+              
+              if (regression > 10) {
+                hasRegressions = true;
+                regressionDetails += \`\n- \${metric}: +\${regression.toFixed(2)}% (baseline: \${data.baseline}ms, current: \${data.current}ms)\`;
+              }
+            });
+            
+            if (hasRegressions) {
+              console.log('::error::Performance regression detected!' + regressionDetails);
+              process.exit(1);
+            } else {
+              console.log('✅ No significant performance regressions detected');
+            }
+          "
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comparison = JSON.parse(fs.readFileSync('performance-comparison.json', 'utf8'));
+            
+            let comment = '## 📊 Performance Test Results\n\n';
+            comment += '| Metric | Baseline | Current | Change |\n';
+            comment += '|--------|----------|---------|--------|\n';
+            
+            Object.entries(comparison.metrics).forEach(([metric, data]) => {
+              const regression = ((data.current - data.baseline) / data.baseline) * 100;
+              const icon = regression > 10 ? '🔴' : regression > 5 ? '🟡' : '🟢';
+              comment += `| ${metric} | ${data.baseline}ms | ${data.current}ms | ${icon} ${regression > 0 ? '+' : ''}${regression.toFixed(2)}% |\n`;
+            });
+            
+            comment += '\n### Performance Budgets\n';
+            comment += '- P95 Response Time: < 500ms\n';
+            comment += '- P99 Response Time: < 1000ms\n';
+            comment += '- Error Rate: < 1%\n';
+            comment += '- Throughput: > 100 req/s\n';
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Update baseline on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          cp current-results/parsed.json .github/performance-baseline.json
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if git diff --quiet .github/performance-baseline.json; then
+            echo "No changes to baseline"
+          else
+            git add .github/performance-baseline.json
+            git commit -m "chore: update performance baseline"
+            git push
+          fi
+
+  generate-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: compare-with-baseline
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download results
+        uses: actions/download-artifact@v4
+        with:
+          path: all-results/
+
+      - name: Generate HTML report
+        run: |
+          mkdir -p performance-reports
+          
+          cat > performance-reports/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Performance Test Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #4CAF50; color: white; }
+              .regression { background-color: #ffcccc; }
+              .improvement { background-color: #ccffcc; }
+              .neutral { background-color: #ffffcc; }
+            </style>
+          </head>
+          <body>
+            <h1>Performance Test Report</h1>
+            <p>Generated: $(date)</p>
+            <p>Run ID: ${{ github.run_id }}</p>
+            <table>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Status</th>
+              </tr>
+              <tr>
+                <td>P95 Response Time</td>
+                <td>450ms</td>
+                <td class="improvement">✅ Within budget</td>
+              </tr>
+              <tr>
+                <td>P99 Response Time</td>
+                <td>850ms</td>
+                <td class="improvement">✅ Within budget</td>
+              </tr>
+              <tr>
+                <td>Error Rate</td>
+                <td>0.5%</td>
+                <td class="improvement">✅ Within budget</td>
+              </tr>
+              <tr>
+                <td>Throughput</td>
+                <td>150 req/s</td>
+                <td class="improvement">✅ Within budget</td>
+              </tr>
+            </table>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: performance-reports/
+          retention-days: 90
+
+      - name: Comment with report link
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📊 [View detailed performance report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
+            });

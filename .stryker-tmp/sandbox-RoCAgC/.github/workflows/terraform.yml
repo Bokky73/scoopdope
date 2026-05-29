@@ -1,0 +1,155 @@
+name: Terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/terraform/**'
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+
+env:
+  TF_VERSION: '1.7.0'
+  AWS_REGION: us-east-1
+
+jobs:
+  terraform:
+    name: Terraform Plan/Apply
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-Scoopdope-Terraform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Install TFLint
+        run: |
+          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+      - name: Run TFLint
+        run: tflint --init && tflint --format compact
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov policy checks
+        run: checkov -d . --framework terraform --output cli --compact
+        continue-on-error: true
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=tfplan -no-color
+        continue-on-error: true
+
+      - name: Convert plan to JSON
+        if: always()
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: Run OPA policy validation
+        uses: open-policy-agent/setup-opa@v1
+        with:
+          version: latest
+
+      - name: Create OPA policy for Terraform
+        run: |
+          mkdir -p opa-policies
+          cat > opa-policies/terraform.rego << 'EOF'
+          package terraform
+
+          deny[msg] {
+              resource := input.resource_changes[_]
+              resource.type == "aws_security_group"
+              rule := resource.change.after.ingress[_]
+              rule.from_port == 0
+              rule.to_port == 65535
+              rule.cidr_blocks[_] == "0.0.0.0/0"
+              msg := sprintf("Security group %s allows unrestricted access", [resource.address])
+          }
+
+          deny[msg] {
+              resource := input.resource_changes[_]
+              resource.type == "aws_rds_cluster"
+              resource.change.after.storage_encrypted == false
+              msg := sprintf("RDS cluster %s must have encryption enabled", [resource.address])
+          }
+
+          deny[msg] {
+              resource := input.resource_changes[_]
+              resource.type == "aws_s3_bucket"
+              resource.change.after.versioning[_].enabled == false
+              msg := sprintf("S3 bucket %s must have versioning enabled", [resource.address])
+          }
+          EOF
+
+      - name: Validate Terraform plan with OPA
+        run: |
+          opa eval -d opa-policies/terraform.rego -i tfplan.json "data.terraform.deny" || true
+
+      - name: Generate cost estimation
+        run: |
+          echo "Terraform Plan Cost Estimation:" > cost-estimate.txt
+          terraform plan -no-color | grep -E "Plan:|No changes|will be created|will be destroyed|will be updated" >> cost-estimate.txt || true
+
+      - name: Upload cost estimate
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terraform-cost-estimate
+          path: cost-estimate.txt
+          retention-days: 30
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan 📖
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            
+            </details>`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve

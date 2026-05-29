@@ -1,0 +1,45 @@
+# PR Labeler Configuration
+# Automatically labels PRs based on changed file paths
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'apps/frontend/**'
+          - '.github/workflows/frontend*.yml'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'apps/backend/**'
+          - '.github/workflows/backend*.yml'
+          - '.github/workflows/ci.yml'
+
+contracts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'contracts/**'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - '.github/workflows/contracts*.yml'
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'docs/**'
+          - '.github/pull_request_template.md'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'package-lock.json'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/dependabot.yml'
+          - '.github/labeler.yml'

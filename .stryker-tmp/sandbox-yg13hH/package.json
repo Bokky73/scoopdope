@@ -1,0 +1,32 @@
+{
+  "name": "scoopdope",
+  "version": "1.0.0",
+  "private": true,
+  "description": "scoopdope - Blockchain Education Platform on Stellar",
+  "workspaces": [
+    "packages/types",
+    "apps/frontend",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "dev:backend": "npm run start:dev --workspace=apps/backend",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "test:load": "./scripts/load-test.sh",
+    "test:mutation": "stryker run",
+    "test:mutation:report": "stryker run --reporters html",
+    "prepare": "husky install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.0.0",
+    "@commitlint/config-conventional": "^18.0.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/jest-runner": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "husky": "^9.0.0"
+  }
+}

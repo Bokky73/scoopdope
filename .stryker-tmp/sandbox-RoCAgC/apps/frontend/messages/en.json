@@ -1,0 +1,84 @@
+{
+  "nav": {
+    "brand": "scoopdope",
+    "courses": "Courses",
+    "dashboard": "Dashboard",
+    "credentials": "Credentials",
+    "profile": "Profile",
+    "login": "Login",
+    "logout": "Logout",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "userMenu": "User menu",
+    "switchLight": "Switch to light mode",
+    "switchDark": "Switch to dark mode",
+    "language": "Language",
+    "siteNav": "Site navigation"
+  },
+  "home": {
+    "title": "scoopdope",
+    "description": "Blockchain education platform built on the Stellar network. Earn verifiable on-chain credentials as you learn.",
+    "browseCourses": "Browse Courses",
+    "getStarted": "Get Started"
+  },
+  "courses": {
+    "title": "Courses",
+    "viewCourse": "View Course →",
+    "viewCourseLabel": "View course: {title}",
+    "levels": {
+      "Beginner": "Beginner",
+      "Intermediate": "Intermediate",
+      "Advanced": "Advanced"
+    }
+  },
+  "credentials": {
+    "title": "My Credentials",
+    "subtitle": "Verifiable on-chain certificates earned by completing courses.",
+    "loading": "Loading credentials…",
+    "empty": "No credentials yet. Complete a course to earn your first certificate!",
+    "issued": "Issued: {date}",
+    "tx": "Tx: {hash}",
+    "verify": "Verify on Stellar ↗",
+    "share": "Share 🔗",
+    "completed": "Completed"
+  },
+  "profile": {
+    "loading": "Loading…",
+    "joined": "Joined {date}",
+    "avatarAlt": "{name}'s avatar",
+    "editProfile": "Edit Profile",
+    "username": "Username",
+    "bio": "Bio",
+    "avatarUrl": "Avatar URL",
+    "saving": "Saving…",
+    "saved": "Saved ✓",
+    "saveChanges": "Save Changes"
+  },
+  "wallet": {
+    "title": "Stellar Wallet",
+    "linkedKey": "Linked public key",
+    "publicKeyLabel": "Stellar public key: {key}",
+    "bstBalance": "BST Balance: {balance} BST",
+    "unlinkWallet": "Unlink Wallet",
+    "description": "Link your Freighter wallet to receive credentials and BST tokens.",
+    "freighterMissing": "Freighter not detected.",
+    "installFreighter": "Install Freighter",
+    "connecting": "Connecting…",
+    "linkWallet": "Link Wallet"
+  },
+  "bookmarks": {
+    "title": "My Bookmarks",
+    "empty": "No bookmarks yet.",
+    "browseCourses": "Browse courses →"
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "navigation": "Navigation",
+    "search": "Search",
+    "closeModal": "Close modal",
+    "showHelp": "Show help",
+    "playPause": "Play / Pause",
+    "seekBack": "Seek back 10s",
+    "seekForward": "Seek forward 10s"
+  }
+}

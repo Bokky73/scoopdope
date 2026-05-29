@@ -1,0 +1,92 @@
+{
+  "nav": {
+    "brand": "scoopdope",
+    "courses": "الدورات",
+    "dashboard": "لوحة التحكم",
+    "credentials": "الشهادات",
+    "profile": "الملف الشخصي",
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
+    "userMenu": "قائمة المستخدم",
+    "switchLight": "التبديل إلى الوضع الفاتح",
+    "switchDark": "التبديل إلى الوضع الداكن",
+    "language": "اللغة",
+    "siteNav": "التنقل في الموقع",
+    "bookmarks": "المفضلة"
+  },
+  "home": {
+    "title": "scoopdope",
+    "description": "منصة تعليمية للبلوكتشين مبنية على شبكة Stellar. اكسب شهادات موثقة على السلسلة أثناء تعلمك.",
+    "browseCourses": "تصفح الدورات",
+    "getStarted": "ابدأ الآن"
+  },
+  "courses": {
+    "title": "الدورات",
+    "viewCourse": "عرض الدورة →",
+    "viewCourseLabel": "عرض الدورة: {title}",
+    "levels": {
+      "Beginner": "مبتدئ",
+      "Intermediate": "متوسط",
+      "Advanced": "متقدم"
+    }
+  },
+  "credentials": {
+    "title": "شهاداتي",
+    "subtitle": "شهادات موثقة على السلسلة تُكتسب عند إتمام الدورات.",
+    "loading": "جارٍ تحميل الشهادات…",
+    "empty": "لا توجد شهادات بعد. أتمم دورة للحصول على أول شهادة!",
+    "issued": "صدرت في: {date}",
+    "tx": "المعاملة: {hash}",
+    "verify": "التحقق على Stellar ↗",
+    "share": "مشاركة 🔗",
+    "completed": "مكتمل"
+  },
+  "profile": {
+    "loading": "جارٍ التحميل…",
+    "joined": "انضم في {date}",
+    "avatarAlt": "صورة {name}",
+    "editProfile": "تعديل الملف الشخصي",
+    "username": "اسم المستخدم",
+    "bio": "نبذة شخصية",
+    "avatarUrl": "رابط الصورة الشخصية",
+    "saving": "جارٍ الحفظ…",
+    "saved": "تم الحفظ ✓",
+    "saveChanges": "حفظ التغييرات",
+    "loadError": "فشل تحميل الملف الشخصي.",
+    "saveError": "فشل حفظ الملف الشخصي.",
+    "usernameRequired": "اسم المستخدم مطلوب.",
+    "retry": "إعادة المحاولة",
+    "usernameHint": "50 حرفاً كحد أقصى.",
+    "bioHint": "{count}/500 حرف.",
+    "avatarUrlHint": "رابط لصورة الملف الشخصي."
+  },
+  "wallet": {
+    "title": "محفظة Stellar",
+    "linkedKey": "المفتاح العام المرتبط",
+    "publicKeyLabel": "المفتاح العام لـ Stellar: {key}",
+    "bstBalance": "رصيد BST: {balance} BST",
+    "unlinkWallet": "إلغاء ربط المحفظة",
+    "description": "اربط محفظة Freighter لاستقبال الشهادات ورموز BST.",
+    "freighterMissing": "لم يتم اكتشاف Freighter.",
+    "installFreighter": "تثبيت Freighter",
+    "connecting": "جارٍ الاتصال…",
+    "linkWallet": "ربط المحفظة"
+  },
+  "bookmarks": {
+    "title": "المفضلة",
+    "empty": "لا توجد مفضلات بعد.",
+    "browseCourses": "تصفح الدورات →"
+  },
+  "shortcuts": {
+    "title": "اختصارات لوحة المفاتيح",
+    "navigation": "التنقل",
+    "search": "بحث",
+    "closeModal": "إغلاق النافذة",
+    "showHelp": "عرض المساعدة",
+    "playPause": "تشغيل / إيقاف",
+    "seekBack": "رجوع 10 ثوانٍ",
+    "seekForward": "تقديم 10 ثوانٍ"
+  }
+}

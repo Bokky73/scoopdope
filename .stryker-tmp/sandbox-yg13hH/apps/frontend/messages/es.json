@@ -1,0 +1,84 @@
+{
+  "nav": {
+    "brand": "scoopdope",
+    "courses": "Cursos",
+    "dashboard": "Panel",
+    "credentials": "Credenciales",
+    "profile": "Perfil",
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú",
+    "userMenu": "Menú de usuario",
+    "switchLight": "Cambiar a modo claro",
+    "switchDark": "Cambiar a modo oscuro",
+    "language": "Idioma",
+    "siteNav": "Navegación del sitio"
+  },
+  "home": {
+    "title": "scoopdope",
+    "description": "Plataforma de educación blockchain construida sobre la red Stellar. Gana credenciales verificables en cadena mientras aprendes.",
+    "browseCourses": "Ver Cursos",
+    "getStarted": "Comenzar"
+  },
+  "courses": {
+    "title": "Cursos",
+    "viewCourse": "Ver Curso →",
+    "viewCourseLabel": "Ver curso: {title}",
+    "levels": {
+      "Beginner": "Principiante",
+      "Intermediate": "Intermedio",
+      "Advanced": "Avanzado"
+    }
+  },
+  "credentials": {
+    "title": "Mis Credenciales",
+    "subtitle": "Certificados verificables en cadena obtenidos al completar cursos.",
+    "loading": "Cargando credenciales…",
+    "empty": "Aún no tienes credenciales. ¡Completa un curso para ganar tu primer certificado!",
+    "issued": "Emitido: {date}",
+    "tx": "Tx: {hash}",
+    "verify": "Verificar en Stellar ↗",
+    "share": "Compartir 🔗",
+    "completed": "Completado"
+  },
+  "profile": {
+    "loading": "Cargando…",
+    "joined": "Unido el {date}",
+    "avatarAlt": "Avatar de {name}",
+    "editProfile": "Editar Perfil",
+    "username": "Nombre de usuario",
+    "bio": "Biografía",
+    "avatarUrl": "URL del avatar",
+    "saving": "Guardando…",
+    "saved": "Guardado ✓",
+    "saveChanges": "Guardar Cambios"
+  },
+  "wallet": {
+    "title": "Cartera Stellar",
+    "linkedKey": "Clave pública vinculada",
+    "publicKeyLabel": "Clave pública Stellar: {key}",
+    "bstBalance": "Saldo BST: {balance} BST",
+    "unlinkWallet": "Desvincular Cartera",
+    "description": "Vincula tu cartera Freighter para recibir credenciales y tokens BST.",
+    "freighterMissing": "Freighter no detectado.",
+    "installFreighter": "Instalar Freighter",
+    "connecting": "Conectando…",
+    "linkWallet": "Vincular Cartera"
+  },
+  "bookmarks": {
+    "title": "Mis Favoritos",
+    "empty": "Aún no hay favoritos.",
+    "browseCourses": "Ver cursos →"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "navigation": "Navegación",
+    "search": "Buscar",
+    "closeModal": "Cerrar ventana",
+    "showHelp": "Mostrar ayuda",
+    "playPause": "Reproducir / Pausar",
+    "seekBack": "Retroceder 10s",
+    "seekForward": "Avanzar 10s"
+  }
+}

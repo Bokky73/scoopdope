@@ -3,37 +3,32 @@
 const config = {
   _comment: 'This config was generated using "stryker init". Please take a look at: https://stryker-mutator.io/docs/stryker-js/configuration/ for more information.',
   packageManager: 'npm',
-  reporters: ['html', 'clear-text', 'progress', 'json'],
+  reporters: ['html', 'clear-text', 'progress'],
   htmlReporter: {
-    baseDir: 'coverage/mutation',
-  },
-  jsonReporter: {
-    baseDir: 'coverage/mutation',
+    fileName: 'coverage/mutation/index.html',
   },
   testRunner: 'jest',
   jest: {
     projectType: 'custom',
-    configFile: 'jest.config.js',
+    configFile: 'apps/backend/jest.config.js',
   },
+  disableTypeChecks: false,
   mutate: [
     'apps/backend/src/**/*.ts',
-    'apps/frontend/src/**/*.ts',
-    'apps/frontend/src/**/*.tsx',
     '!**/*.spec.ts',
     '!**/*.test.ts',
-    '!**/*.spec.tsx',
-    '!**/*.test.tsx',
     '!**/index.ts',
-    '!**/types.ts',
+    '!**/main.ts',
+    '!**/module.ts',
   ],
-  thresholds: {
-    high: 80,
-    medium: 60,
-    low: 40,
-  },
   timeoutMS: 5000,
   timeoutFactor: 1.25,
-  maxConcurrentTestRunners: 4,
+  concurrency: 2,
+  thresholds: {
+    high: 80,
+    medium: 70,
+    low: 40,
+  },
 };
 
 export default config;

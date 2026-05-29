@@ -1,0 +1,228 @@
+name: Deploy Smart Contracts
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Target network'
+        required: true
+        default: 'testnet'
+        type: choice
+        options:
+          - testnet
+          - mainnet
+      contracts:
+        description: 'Comma-separated contract names (or "all")'
+        required: true
+        default: 'all'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/contracts
+
+jobs:
+  build-contracts:
+    name: Build Smart Contracts
+    runs-on: ubuntu-latest
+
+    outputs:
+      build-matrix: ${{ steps.matrix.outputs.contracts }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build all contracts
+        run: ./scripts/build.sh
+
+      - name: Generate build matrix
+        id: matrix
+        run: |
+          if [ "${{ github.event.inputs.contracts }}" = "all" ]; then
+            CONTRACTS=$(ls -d contracts/*/Cargo.toml | sed 's|contracts/||;s|/Cargo.toml||' | jq -R -s -c 'split("\n")[:-1]')
+          else
+            CONTRACTS=$(echo "${{ github.event.inputs.contracts }}" | tr ',' '\n' | jq -R -s -c 'split("\n")[:-1]')
+          fi
+          echo "contracts=$CONTRACTS" >> $GITHUB_OUTPUT
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-builds
+          path: target/wasm32-unknown-unknown/release/*.wasm
+          retention-days: 7
+
+  deploy-approval:
+    name: Request Deployment Approval
+    runs-on: ubuntu-latest
+    needs: build-contracts
+    if: github.event.inputs.network == 'mainnet'
+
+    environment:
+      name: contract-deployment-mainnet
+      url: https://stellar.expert/explorer/mainnet
+
+    steps:
+      - name: Approval requested
+        run: |
+          echo "⏳ Deployment to mainnet requires manual approval"
+          echo "Network: ${{ github.event.inputs.network }}"
+          echo "Contracts: ${{ github.event.inputs.contracts }}"
+
+  deploy:
+    name: Deploy Contracts to ${{ github.event.inputs.network }}
+    runs-on: ubuntu-latest
+    needs: [build-contracts, deploy-approval]
+    if: always() && needs.build-contracts.result == 'success' && (github.event.inputs.network == 'testnet' || needs.deploy-approval.result == 'success')
+    strategy:
+      matrix:
+        contract: ${{ fromJson(needs.build-contracts.outputs.build-matrix) }}
+      max-parallel: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://github.com/stellar/stellar-cli/releases/download/v21.5.0/stellar-cli-21.5.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv stellar /usr/local/bin/
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-builds
+          path: target/wasm32-unknown-unknown/release/
+
+      - name: Deploy contract
+        id: deploy
+        run: |
+          WASM_FILE="target/wasm32-unknown-unknown/release/brain_storm_${{ matrix.contract }}.wasm"
+          
+          if [ ! -f "$WASM_FILE" ]; then
+            echo "❌ WASM file not found: $WASM_FILE"
+            exit 1
+          fi
+          
+          echo "🚀 Deploying ${{ matrix.contract }} to ${{ github.event.inputs.network }}..."
+          
+          CONTRACT_ID=$(stellar contract deploy \
+            --wasm "$WASM_FILE" \
+            --source "${{ secrets.STELLAR_SECRET_KEY }}" \
+            --network "${{ github.event.inputs.network }}" 2>&1 | grep -oP '(?<=Contract ID: )[A-Z0-9]+' || echo "")
+          
+          if [ -z "$CONTRACT_ID" ]; then
+            echo "❌ Deployment failed for ${{ matrix.contract }}"
+            exit 1
+          fi
+          
+          echo "contract_id=$CONTRACT_ID" >> $GITHUB_OUTPUT
+          echo "✅ Deployed ${{ matrix.contract }}: $CONTRACT_ID"
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment of ${{ matrix.contract }}..."
+          
+          stellar contract info \
+            --id "${{ steps.deploy.outputs.contract_id }}" \
+            --network "${{ github.event.inputs.network }}" || {
+            echo "⚠️ Verification failed, but deployment may still be processing"
+          }
+
+      - name: Store contract ID
+        run: |
+          mkdir -p deployment-artifacts
+          echo "${{ steps.deploy.outputs.contract_id }}" > "deployment-artifacts/${{ matrix.contract }}-${{ github.event.inputs.network }}.txt"
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-contracts-${{ github.event.inputs.network }}
+          path: deployment-artifacts/
+          retention-days: 30
+
+  update-registry:
+    name: Update Contract Registry
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: success()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Update deployed-contracts.json
+        run: |
+          cd scripts
+          
+          # Merge all contract IDs into deployed-contracts.json
+          for file in ../all-artifacts/deployed-contracts-*/*/; do
+            if [ -f "$file" ]; then
+              CONTRACT_NAME=$(basename "$file" | sed 's/-testnet.txt\|-mainnet.txt//')
+              CONTRACT_ID=$(cat "$file")
+              NETWORK=$(basename "$file" | sed 's/.*-\(testnet\|mainnet\).txt/\1/')
+              
+              jq ".\"$NETWORK\".\"$CONTRACT_NAME\" = \"$CONTRACT_ID\"" deployed-contracts.json > deployed-contracts.json.tmp
+              mv deployed-contracts.json.tmp deployed-contracts.json
+            fi
+          done
+
+      - name: Commit and push updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if git diff --quiet scripts/deployed-contracts.json; then
+            echo "No changes to deployed-contracts.json"
+          else
+            git add scripts/deployed-contracts.json
+            git commit -m "chore: update deployed contract IDs for ${{ github.event.inputs.network }}"
+            git push
+          fi
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+
+    steps:
+      - name: Notify rollback
+        run: |
+          echo "❌ Deployment failed. Rollback triggered."
+          echo "Network: ${{ github.event.inputs.network }}"
+          echo "Contracts: ${{ github.event.inputs.contracts }}"
+          echo ""
+          echo "To rollback, redeploy the previous contract versions or update the registry manually."
+
+      - name: Create issue for failed deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Contract Deployment Failed - ${{ github.event.inputs.network }}`,
+              body: `Deployment workflow failed for the following contracts:\n\n- Network: ${{ github.event.inputs.network }}\n- Contracts: ${{ github.event.inputs.contracts }}\n- Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['bug', 'deployment', 'contracts']
+            });

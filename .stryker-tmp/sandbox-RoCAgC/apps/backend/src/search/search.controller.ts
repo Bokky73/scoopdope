@@ -1,0 +1,153 @@
+// @ts-nocheck
+function stryNS_9fa48() {
+  var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function("return this")();
+  var ns = g.__stryker__ || (g.__stryker__ = {});
+  if (ns.activeMutant === undefined && g.process && g.process.env && g.process.env.__STRYKER_ACTIVE_MUTANT__) {
+    ns.activeMutant = g.process.env.__STRYKER_ACTIVE_MUTANT__;
+  }
+  function retrieveNS() {
+    return ns;
+  }
+  stryNS_9fa48 = retrieveNS;
+  return retrieveNS();
+}
+stryNS_9fa48();
+function stryCov_9fa48() {
+  var ns = stryNS_9fa48();
+  var cov = ns.mutantCoverage || (ns.mutantCoverage = {
+    static: {},
+    perTest: {}
+  });
+  function cover() {
+    var c = cov.static;
+    if (ns.currentTestId) {
+      c = cov.perTest[ns.currentTestId] = cov.perTest[ns.currentTestId] || {};
+    }
+    var a = arguments;
+    for (var i = 0; i < a.length; i++) {
+      c[a[i]] = (c[a[i]] || 0) + 1;
+    }
+  }
+  stryCov_9fa48 = cover;
+  cover.apply(null, arguments);
+}
+function stryMutAct_9fa48(id) {
+  var ns = stryNS_9fa48();
+  function isActive(id) {
+    if (ns.activeMutant === id) {
+      if (ns.hitCount !== void 0 && ++ns.hitCount > ns.hitLimit) {
+        throw new Error('Stryker: Hit count limit reached (' + ns.hitCount + ')');
+      }
+      return true;
+    }
+    return false;
+  }
+  stryMutAct_9fa48 = isActive;
+  return isActive(id);
+}
+import { Body, Controller, Get, Optional, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { SearchService, IndexName } from './search.service';
+@ApiTags('search')
+@Controller('search')
+export class SearchController {
+  constructor(private readonly searchService: SearchService) {}
+  @Get()
+  @ApiOperation({
+    summary: 'Full-text fuzzy search across courses, lessons, and posts'
+  })
+  @ApiQuery({
+    name: 'q',
+    description: 'Search query'
+  })
+  @ApiQuery({
+    name: 'indices',
+    required: false,
+    description: 'Comma-separated: courses,lessons,posts'
+  })
+  search(@Query('q')
+  q: string, @Query('indices')
+  indices?: string, @Request()
+  req?: {
+    user?: {
+      id: string;
+    };
+  }) {
+    if (stryMutAct_9fa48("6096")) {
+      {}
+    } else {
+      stryCov_9fa48("6096");
+      const idx = indices ? indices.split(',').filter(Boolean) as IndexName[] : undefined;
+      return this.searchService.search(q, idx, stryMutAct_9fa48("6098") ? req.user?.id : stryMutAct_9fa48("6097") ? req?.user.id : (stryCov_9fa48("6097", "6098"), req?.user?.id));
+    }
+  }
+  @Get('autocomplete')
+  @ApiOperation({
+    summary: 'Autocomplete / search suggestions'
+  })
+  @ApiQuery({
+    name: 'q',
+    description: 'Prefix to complete'
+  })
+  @ApiQuery({
+    name: 'indices',
+    required: false
+  })
+  autocomplete(@Query('q')
+  q: string, @Query('indices')
+  indices?: string) {
+    if (stryMutAct_9fa48("6099")) {
+      {}
+    } else {
+      stryCov_9fa48("6099");
+      const idx = indices ? indices.split(',').filter(Boolean) as IndexName[] : undefined;
+      return this.searchService.autocomplete(q, idx);
+    }
+  }
+  @Post('click')
+  @ApiOperation({
+    summary: 'Track a search result click for analytics'
+  })
+  trackClick(@Body()
+  body: {
+    query: string;
+    resultId: string;
+    resultType: string;
+  }, @Request()
+  req?: {
+    user?: {
+      id: string;
+    };
+  }) {
+    if (stryMutAct_9fa48("6100")) {
+      {}
+    } else {
+      stryCov_9fa48("6100");
+      return this.searchService.trackClick(body.query, body.resultId, body.resultType, stryMutAct_9fa48("6102") ? req.user?.id : stryMutAct_9fa48("6101") ? req?.user.id : (stryCov_9fa48("6101", "6102"), req?.user?.id));
+    }
+  }
+  @Get('analytics/top-queries')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get top search queries (admin)'
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number
+  })
+  getTopQueries(@Query('limit')
+  limit?: string) {
+    if (stryMutAct_9fa48("6103")) {
+      {}
+    } else {
+      stryCov_9fa48("6103");
+      return this.searchService.getTopQueries(limit ? parseInt(limit, 10) : 10);
+    }
+  }
+}

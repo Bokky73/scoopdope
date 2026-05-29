@@ -1,0 +1,533 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-test:
+    name: Backend - Install, Build, Test, Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint backend
+        run: npm run lint --workspace=apps/backend
+
+      - name: Type-check backend
+        run: npm run type-check --workspace=apps/backend
+
+      - name: Build backend
+        run: npm run build --workspace=apps/backend
+        env:
+          GIT_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Run unit tests with coverage
+        run: npx jest --coverage --passWithNoTests
+        working-directory: apps/backend
+
+      - name: Run Pact provider verification
+        run: npm run test:pact --workspace=apps/backend
+        continue-on-error: true
+
+  backend-integration-test:
+    name: Backend - Integration Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      docker:
+        image: docker:latest
+        options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run integration tests
+        run: npm run test:integration --workspace=apps/backend
+        env:
+          NODE_ENV: test
+
+  backend-soroban-test:
+    name: Backend - Soroban Testnet Tests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://github.com/stellar/stellar-cli/releases/download/v21.5.0/stellar-cli-21.5.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          sudo mv stellar /usr/local/bin/
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build contracts
+        run: ./scripts/build.sh
+
+      - name: Run Soroban tests
+        run: npx jest --testPathPattern='soroban-spec' --runInBand
+        working-directory: apps/backend
+        env:
+          CI: 'true'
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
+
+  frontend-build:
+    name: Frontend - Install, Build, Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint frontend
+        run: npm run lint --workspace=apps/frontend
+
+      - name: Build frontend
+        run: npm run build --workspace=apps/frontend
+        env:
+          NEXT_PUBLIC_GIT_COMMIT_SHA: ${{ github.sha }}
+
+      - name: Run Pact consumer tests
+        run: npm run test:pact --workspace=apps/frontend
+        continue-on-error: true
+
+  chromatic-visual-tests:
+    name: Frontend - Visual Regression Tests (Chromatic)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Storybook
+        run: npm run build-storybook --workspace=apps/frontend
+
+      - name: Publish to Chromatic
+        uses: chromaui/action@v1
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          storybookBuildDir: apps/frontend/storybook-static
+          exitZeroOnChanges: true
+
+  accessibility-tests:
+    name: Frontend - Accessibility Tests (WCAG 2.1 AA)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+  percy-visual-tests:
+    name: Frontend - Visual Regression Tests (Percy)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: Scoopdope_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build frontend
+        run: npm run build --workspace=apps/frontend
+
+      - name: Start frontend server
+        run: npm run start --workspace=apps/frontend &
+        timeout-minutes: 2
+
+      - name: Wait for frontend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:3000; then
+              echo "Frontend is ready"
+              exit 0
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+          echo "Frontend failed to start"
+          exit 1
+
+      - name: Run accessibility tests
+        run: npm run test:e2e -- e2e/accessibility.spec.ts
+        working-directory: apps/frontend
+        continue-on-error: false
+
+      - name: Upload accessibility test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-test-results
+          path: apps/frontend/test-results/
+          retention-days: 30
+
+  contracts-check:
+    name: Contracts - Test, Format, Lint, Audit, Deny
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: cargo test
+        run: cargo test
+
+      - name: cargo test with property-based fuzzing (60s timeout)
+        run: timeout 60 cargo test --lib fuzz -- --test-threads=1 || true
+
+      - name: cargo test with proptest fuzzing (120s timeout)
+        run: timeout 120 cargo test --lib proptest -- --test-threads=1 --nocapture || true
+
+      - name: cargo fmt check
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy -- -D warnings
+
+      - name: cargo audit
+        run: cargo audit --deny warnings
+
+      - name: cargo deny
+        run: cargo deny check
+
+      - name: Upload fuzzing results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzing-results
+          path: target/debug/deps/
+          retention-days: 7
+
+  load-tests:
+    name: Load Tests - k6
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run auth load test
+        run: k6 run --out json=results-auth.json scripts/load-tests/auth-login.js
+        env:
+          API_URL: ${{ env.API_URL || 'http://localhost:3000' }}
+        continue-on-error: true
+
+      - name: Run courses load test
+        run: k6 run --out json=results-courses.json scripts/load-tests/courses.js
+        env:
+          API_URL: ${{ env.API_URL || 'http://localhost:3000' }}
+        continue-on-error: true
+
+      - name: Run enrollment load test
+        run: k6 run --out json=results-enrollment.json scripts/load-tests/enrollment.js
+        env:
+          API_URL: ${{ env.API_URL || 'http://localhost:3000' }}
+        continue-on-error: true
+
+      - name: Run video streaming load test
+        run: k6 run --out json=results-video.json scripts/load-tests/video-streaming.js
+        env:
+          API_URL: ${{ env.API_URL || 'http://localhost:3000' }}
+        continue-on-error: true
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-load-test-results
+          path: results-*.json
+          retention-days: 30
+
+  sonarcloud:
+    name: Code Quality - SonarCloud
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate frontend coverage
+        run: npm run test:coverage --workspace=apps/frontend
+        continue-on-error: true
+
+      - name: Generate backend coverage
+        run: npm run test --workspace=apps/backend -- --coverage
+        working-directory: apps/backend
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  docker-security-scan:
+    name: Security - Docker Image Scanning (Trivy)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build backend Docker image
+        run: docker build -t scoopdope-backend:${{ github.sha }} -f apps/backend/Dockerfile .
+
+      - name: Build frontend Docker image
+        run: docker build -t scoopdope-frontend:${{ github.sha }} -f apps/frontend/Dockerfile .
+
+      - name: Run Trivy vulnerability scanner on backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: scoopdope-backend:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy vulnerability scanner on frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: scoopdope-frontend:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy backend results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-backend-results.sarif'
+          category: 'trivy-backend'
+
+      - name: Upload Trivy frontend results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-frontend-results.sarif'
+          category: 'trivy-frontend'
+
+      - name: Generate Trivy HTML report
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image --format template --template '@/contrib/html.tpl' \
+            -o trivy-report.html scoopdope-backend:${{ github.sha }}
+
+      - name: Upload Trivy HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-security-report
+          path: trivy-report.html
+          retention-days: 30
+
+      - name: Fail on critical vulnerabilities
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image --severity CRITICAL --exit-code 1 \
+            scoopdope-backend:${{ github.sha }}
+
+  security-scan:
+    name: Security - OWASP ZAP Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: Scoopdope_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start backend server
+        run: npm run start:prod --workspace=apps/backend &
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/Scoopdope_test
+          REDIS_URL: redis://localhost:6379
+        timeout-minutes: 2
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:3000/health; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          echo "Backend failed to start"
+          exit 1
+
+      - name: Run OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.7.0
+        with:
+          target: 'http://localhost:3000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: report_html.html
+          retention-days: 30
+
+      - name: Check for HIGH severity findings
+        run: |
+          if grep -q "HIGH" report_html.html; then
+            echo "HIGH severity findings detected in ZAP scan"
+            exit 1
+          fi
+        continue-on-error: true

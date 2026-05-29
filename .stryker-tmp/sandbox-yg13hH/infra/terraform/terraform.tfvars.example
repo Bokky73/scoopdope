@@ -1,0 +1,23 @@
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "prod"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+
+# Database Configuration
+db_name           = "Scoopdope"
+db_username       = "admin"
+db_password       = "change-me-in-production"
+db_instance_class = "db.t3.micro"
+
+# Redis Configuration
+redis_node_type = "cache.t3.micro"
+
+# Application Images
+backend_image  = "your-registry/scoopdope-backend:latest"
+frontend_image = "your-registry/scoopdope-frontend:latest"
+
+# GitHub OIDC
+github_org  = "your-github-org"
+github_repo = "scoopdope"

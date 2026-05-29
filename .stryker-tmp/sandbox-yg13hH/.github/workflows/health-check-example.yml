@@ -1,0 +1,95 @@
+# Example GitHub Actions workflow for health check integration
+# This file demonstrates how to integrate the health check into CI/CD pipeline
+
+name: Deploy and Health Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy-and-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scoopdope-test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+          
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: apps/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd apps/backend
+          npm ci
+
+      - name: Build application
+        run: |
+          cd apps/backend
+          npm run build
+
+      - name: Start application in background
+        run: |
+          cd apps/backend
+          npm run start:prod &
+          echo $! > app.pid
+        env:
+          NODE_ENV: production
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: scoopdope-test
+          REDIS_URL: redis://localhost:6379
+          LOG_LEVEL: info
+          JWT_SECRET: test-secret-key
+          STELLAR_HORIZON_URL: https://horizon-testnet.stellar.org
+
+      - name: Wait for application startup
+        run: sleep 10
+
+      - name: Run health check smoke test
+        run: |
+          chmod +x scripts/health-check.sh
+          ./scripts/health-check.sh
+        env:
+          API_URL: http://localhost:3000
+          MAX_RETRIES: 10
+          RETRY_INTERVAL: 3
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f apps/backend/app.pid ]; then
+            kill $(cat apps/backend/app.pid) || true
+          fi

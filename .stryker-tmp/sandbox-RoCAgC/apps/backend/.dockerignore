@@ -1,0 +1,15 @@
+node_modules
+dist
+npm-debug.log
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.git
+.gitignore
+README.md
+.eslintrc.js
+jest*.config.js
+src/**/*.spec.ts
+src/**/*.test.ts

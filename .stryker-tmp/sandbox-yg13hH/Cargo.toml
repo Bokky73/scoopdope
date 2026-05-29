@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "contracts/analytics",
+    "contracts/token",
+    "contracts/shared",
+    "contracts/certificate",
+    "contracts/governance",
+    "contracts/credential_metadata",
+    "contracts/reputation",
+    "contracts/buyback",
+    "contracts/liquidity_pool",
+    "contracts/grants",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+panic = "abort"
+codegen-units = 1
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true

@@ -1,0 +1,93 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: scoopdope-network-latency
+  namespace: default
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: scoopdope-backend
+  delay:
+    latency: "100ms"
+    jitter: "10ms"
+  duration: 5m
+  scheduler:
+    cron: "@hourly"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: scoopdope-network-partition
+  namespace: default
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: scoopdope-backend
+  direction: both
+  duration: 3m
+  scheduler:
+    cron: "@daily"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: scoopdope-pod-kill
+  namespace: default
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: scoopdope-backend
+  duration: 1m
+  scheduler:
+    cron: "0 2 * * *"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: scoopdope-pod-failure
+  namespace: default
+spec:
+  action: pod-failure
+  mode: fixed
+  value: "1"
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: scoopdope-backend
+  duration: 2m
+  scheduler:
+    cron: "0 3 * * *"
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: scoopdope-cpu-stress
+  namespace: default
+spec:
+  action: stress
+  mode: all
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: scoopdope-backend
+  stressors:
+    cpu:
+      workers: 2
+      load: 80
+  duration: 5m
+  scheduler:
+    cron: "0 4 * * *"

@@ -1,0 +1,90 @@
+name: Contracts
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'contracts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/contracts.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+jobs:
+  contracts-test:
+    name: Contracts - Test, Format, Lint, Audit, Deny
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            contracts
+
+      - name: cargo test
+        run: cargo test --all
+        working-directory: contracts
+
+      - name: cargo test with fuzz (60s timeout)
+        run: timeout 60 cargo test --lib fuzz || true
+        working-directory: contracts
+
+      - name: cargo fmt check
+        run: cargo fmt --check
+        working-directory: contracts
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: contracts
+
+      - name: cargo audit
+        run: cargo audit --deny warnings
+        working-directory: contracts
+
+      - name: cargo deny
+        run: cargo deny check
+        working-directory: contracts
+
+  contracts-build-wasm:
+    name: Contracts - Build WASM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            contracts
+
+      - name: Build WASM contracts
+        run: ./scripts/build.sh
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-contracts
+          path: contracts/**/target/wasm32-unknown-unknown/release/*.wasm
+          retention-days: 7
