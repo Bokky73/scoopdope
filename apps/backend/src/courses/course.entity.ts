@@ -65,6 +65,10 @@ export class Course {
   @Column({ type: 'jsonb', nullable: true })
   skills: string[];
 
+  /** Course tags/categories for discovery and filtering (e.g. "defi", "nft", "stellar-basics") */
+  @Column({ type: 'jsonb', nullable: true, default: () => "'[]'" })
+  tags: string[];
+
   @Column({ nullable: true, type: 'timestamptz' })
   scheduledAt: Date | null;
 

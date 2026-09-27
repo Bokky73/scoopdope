@@ -22,5 +22,6 @@ import { MetricsModule } from '../metrics/metrics.module';
   ],
   providers: [ProgressService],
   controllers: [ProgressController],
+  exports: [ProgressService],
 })
 export class ProgressModule {}

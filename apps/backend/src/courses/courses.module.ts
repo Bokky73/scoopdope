@@ -25,6 +25,7 @@ import { TranscribeService } from './transcribe.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { User } from '../users/user.entity';
+import { ProgressModule } from '../progress/progress.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { User } from '../users/user.entity';
     SearchModule,
     NotificationsModule,
     MetricsModule,
+    ProgressModule,
   ],
   providers: [CoursesService, ModulesService, LessonsService, ReviewsService, CourseVersioningService, PrerequisitesService, CourseSchedulerService, DripSchedulerService, TranscribeService],
   controllers: [CoursesController, ModulesController, ReviewsController, CourseVersioningController, PrerequisitesController],

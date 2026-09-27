@@ -23,11 +23,12 @@ export class CoursesService {
   ) {}
 
   async findAll(query: CourseQueryDto = {}) {
-    const { search, level, language, page = 1, limit = 20 } = query;
+    const { search, level, language, tags, page = 1, limit = 20 } = query;
 
     // Cache key encodes all filter params; skip cache for search queries
+    const tagsKey = tags?.length ? tags.sort().join(',') : '';
     const cacheKey = !search
-      ? `courses:catalog:${level ?? ''}:${language ?? ''}:${page}:${limit}`
+      ? `courses:catalog:${level ?? ''}:${language ?? ''}:${tagsKey}:${page}:${limit}`
       : null;
 
     if (cacheKey) {
@@ -56,6 +57,11 @@ export class CoursesService {
 
     if (language) {
       qb.andWhere('course.language = :language', { language });
+    }
+
+    // Filter by tags: course must contain ALL provided tags (jsonb @> operator)
+    if (tags && tags.length > 0) {
+      qb.andWhere('course.tags @> :tags::jsonb', { tags: JSON.stringify(tags) });
     }
 
     const total = await qb.clone().getCount();

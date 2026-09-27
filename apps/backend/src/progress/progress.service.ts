@@ -105,4 +105,53 @@ export class ProgressService {
   findByUser(userId: string) {
     return this.repo.find({ where: { userId }, order: { updatedAt: 'DESC' } });
   }
+
+  /**
+   * Recalculate progress percentages for all enrolled users in a course after a lesson is deleted.
+   *
+   * Because progress is stored as a percentage (not per-lesson completion flags),
+   * we scale each user's existing progressPct proportionally:
+   *   newPct = round(oldPct * totalLessonsBeforeDeletion / totalLessonsAfterDeletion)
+   * clamped to [0, 100].  Users who had already reached 100% retain 100% only
+   * if they still have 100% after the scale (i.e., they keep their completion).
+   *
+   * If the deleted lesson was the last lesson in the course (totalLessonsAfterDeletion === 0),
+   * all in-progress records are left unchanged and only the lessonId pointer is cleared
+   * for records that referenced the deleted lesson.
+   *
+   * @param courseId                   ID of the course the lesson belonged to
+   * @param deletedLessonId            ID of the lesson that was just removed
+   * @param totalLessonsBeforeDeletion Total lesson count before the deletion
+   * @param totalLessonsAfterDeletion  Total lesson count after the deletion
+   */
+  async recalcOnLessonDeletion(
+    courseId: string,
+    deletedLessonId: string,
+    totalLessonsBeforeDeletion: number,
+    totalLessonsAfterDeletion: number,
+  ): Promise<void> {
+    const records = await this.repo.find({ where: { courseId } });
+    if (records.length === 0) return;
+
+    for (const record of records) {
+      // Clear dangling lessonId reference
+      if (record.lessonId === deletedLessonId) {
+        record.lessonId = undefined as unknown as string;
+      }
+
+      if (totalLessonsAfterDeletion > 0 && totalLessonsBeforeDeletion > 0) {
+        const scaled = Math.round(
+          (record.progressPct * totalLessonsBeforeDeletion) / totalLessonsAfterDeletion,
+        );
+        record.progressPct = Math.min(100, Math.max(0, scaled));
+
+        // If newly below 100, clear the completedAt timestamp
+        if (record.progressPct < 100 && record.completedAt) {
+          record.completedAt = undefined as unknown as Date;
+        }
+      }
+    }
+
+    await this.repo.save(records);
+  }
 }

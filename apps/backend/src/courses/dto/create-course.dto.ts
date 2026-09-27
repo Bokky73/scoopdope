@@ -29,6 +29,8 @@ export class CreateCourseDto {
 
   @IsOptional() @IsString({ each: true }) skills?: string[];
 
+  @IsOptional() @IsString({ each: true }) tags?: string[];
+
   @IsOptional() @IsInt() @Min(0) durationHours?: number;
 
   @IsOptional() @IsBoolean() requiresKyc?: boolean;

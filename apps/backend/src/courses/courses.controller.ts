@@ -9,7 +9,12 @@ import {
   Query,
   UseGuards,
   Header,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CoursesService } from './courses.service';
 import {
   ApiTags,
@@ -18,12 +23,26 @@ import {
   ApiQuery,
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CourseQueryDto } from './dto/course-query.dto';
 import { ScheduleCourseDto } from './dto/schedule-course.dto';
+
+/** Allowed MIME types for course thumbnails */
+const THUMBNAIL_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+]);
+
+/** 2 MB in bytes */
+const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
 
 @ApiTags('courses')
 @Controller('courses')
@@ -54,6 +73,13 @@ export class CoursesController {
     name: 'language',
     required: false,
     description: 'Filter by BCP-47 language code (e.g. "en", "es", "fr", "ar")',
+  })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    isArray: true,
+    description: 'Filter by tags (comma-separated or repeated). Courses must match ALL provided tags.',
+    example: 'defi,nft',
   })
   @ApiQuery({
     name: 'page',
@@ -195,6 +221,74 @@ export class CoursesController {
   @ApiResponse({ status: 200, description: 'Course published' })
   publishNow(@Param('id') id: string) {
     return this.coursesService.publishNow(id);
+  }
+
+  @Post(':id/thumbnail')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'instructor')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a thumbnail image for a course (max 2 MB, image files only)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Thumbnail image file (JPEG, PNG, GIF, WebP, SVG). Max 2 MB.',
+        },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Thumbnail URL saved to the course record' })
+  @ApiResponse({ status: 400, description: 'File missing, too large, or not an image' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: THUMBNAIL_MAX_BYTES },
+      fileFilter: (_req, file, cb) => {
+        if (THUMBNAIL_MIME_TYPES.has(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(
+            new BadRequestException(
+              `Unsupported file type "${file.mimetype}". Allowed types: ${[...THUMBNAIL_MIME_TYPES].join(', ')}`,
+            ),
+            false,
+          );
+        }
+      },
+    }),
+  )
+  async uploadThumbnail(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded. Provide a "file" field in the form data.');
+    }
+
+    if (file.size > THUMBNAIL_MAX_BYTES) {
+      throw new BadRequestException(
+        `File exceeds the 2 MB size limit (received ${(file.size / 1024 / 1024).toFixed(2)} MB).`,
+      );
+    }
+
+    // In production this buffer would be streamed to S3/CDN and a URL returned.
+    // For now we store a data URI so the endpoint is immediately functional
+    // without external storage dependencies.
+    const base64 = file.buffer.toString('base64');
+    const thumbnailUrl = `data:${file.mimetype};base64,${base64}`;
+
+    const updated = await this.coursesService.update(id, { thumbnailUrl });
+    return { thumbnailUrl: updated.thumbnailUrl };
   }
 }
 
