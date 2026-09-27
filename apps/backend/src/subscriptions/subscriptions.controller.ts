@@ -19,7 +19,7 @@ export class SubscriptionsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async createCheckout(@Req() req, @Body('tier') tier: SubscriptionTier) {
+  async createCheckout(@Req() req: { user: { id: string } }, @Body('tier') tier: SubscriptionTier) {
     return this.subscriptionsService.createCheckoutSession(req.user.id, tier);
   }
 
@@ -33,7 +33,7 @@ export class SubscriptionsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async getStatus(@Req() req) {
+  async getStatus(@Req() req: { user: { id: string } }) {
     return this.subscriptionsService.getSubscriptionStatus(req.user.id);
   }
 

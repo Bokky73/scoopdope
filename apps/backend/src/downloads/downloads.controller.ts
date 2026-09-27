@@ -8,6 +8,7 @@ import {
   Body,
   UseGuards,
   Request,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -36,7 +37,7 @@ export class DownloadsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  queue(@Request() req, @Body() dto: QueueDownloadDto) {
+  queue(@Req() req: Request & { user: { id: string } }, @Body() dto: QueueDownloadDto) {
     return this.service.queueDownload(
       req.user.id,
       dto.courseId,
@@ -55,7 +56,7 @@ export class DownloadsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  list(@Request() req) {
+  list(@Req() req: Request & { user: { id: string } }) {
     return this.service.findByUser(req.user.id);
   }
 
@@ -67,7 +68,7 @@ export class DownloadsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  storage(@Request() req) {
+  storage(@Req() req: Request & { user: { id: string } }) {
     return this.service.getStorageStats(req.user.id);
   }
 
@@ -79,7 +80,7 @@ export class DownloadsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  complete(@Request() req, @Param('id') id: string) {
+  complete(@Req() req: Request & { user: { id: string } }, @Param('id') id: string) {
     return this.service.markCompleted(id, req.user.id);
   }
 
@@ -91,7 +92,7 @@ export class DownloadsController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  remove(@Request() req, @Param('id') id: string) {
+  remove(@Req() req: Request & { user: { id: string } }, @Param('id') id: string) {
     return this.service.remove(id, req.user.id);
   }
 }

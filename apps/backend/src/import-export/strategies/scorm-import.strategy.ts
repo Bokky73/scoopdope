@@ -96,7 +96,7 @@ export class ScormImportStrategy implements ImportStrategy {
 
           // File entry: open a read stream and pipe directly to disk.
           // Only one entry is ever in flight at a time — nothing is buffered.
-          zipFile.openReadStream(entry, (streamErr: Error | null, readStream: ScormEntryStream) => {
+          zipFile.openReadStream(entry, (streamErr: Error | null, readStream: NodeJS.ReadableStream) => {
             if (streamErr || !readStream) {
               return reject(streamErr ?? new Error('Failed to open entry read stream'));
             }

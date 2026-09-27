@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { User } from '../users/user.entity';
 import { StellarService } from '../stellar/stellar.service';
 
@@ -10,7 +11,8 @@ export class StreaksService {
 
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    private stellarService: StellarService
+    private stellarService: StellarService,
+    @Optional() private eventEmitter?: EventEmitter2,
   ) {}
 
   async recordActivity(userId: string): Promise<User> {
@@ -52,6 +54,7 @@ export class StreaksService {
     }
 
     const savedUser = await this.userRepo.save(user);
+    this.eventEmitter?.emit('streak.updated', { userId: savedUser.id, currentStreak: savedUser.currentStreak });
 
     // Check for milestone rewards
     await this.checkMilestones(savedUser);
@@ -74,8 +77,9 @@ export class StreaksService {
         );
         await this.stellarService.mintReward(user.stellarPublicKey, milestone.reward);
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to mint streak reward for user ${user.id}: ${error.message}`
+          `Failed to mint streak reward for user ${user.id}: ${message}`
         );
       }
     }

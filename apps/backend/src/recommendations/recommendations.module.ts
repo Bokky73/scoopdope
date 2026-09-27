@@ -7,11 +7,12 @@ import { Review } from '../courses/review.entity';
 import { MetricsModule } from '../metrics/metrics.module';
 import { RecommendationsService } from './recommendations.service';
 import { RecommendationsController } from './recommendations.controller';
+import { LearningPathService } from './learning-path.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Enrollment, Course, Progress, Review]), MetricsModule],
-  providers: [RecommendationsService],
+  providers: [RecommendationsService, LearningPathService],
   controllers: [RecommendationsController],
-  exports: [RecommendationsService],
+  exports: [RecommendationsService, LearningPathService],
 })
 export class RecommendationsModule {}

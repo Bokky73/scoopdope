@@ -1,139 +1,77 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { SentryModule } from '@sentry/nestjs/setup';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ScheduleModule } from '@nestjs/schedule';
-import { DatabaseConfigValidator } from './common/validators/database-config.validator';
-import { AuthModule } from './auth/auth.module';
-import { ApiKeysModule } from './api-keys/api-keys.module';
-import { DatabaseModule } from './database/database.module';
-import { CoursesModule } from './courses/courses.module';
+import { APP_FILTER, APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
+
+// ── Entities ────────────────────────────────────────────────────────────────────
+
+import { User } from './users/user.entity';
+import { Course } from './courses/course.entity';
+import { Enrollment } from './enrollments/enrollment.entity';
+import { Certificate } from './certificates/certificate.entity';
+import { Bundle } from './bundles/bundle.entity';
+import { BundleCourse } from './bundles/bundle-course.entity';
+
+// ── Modules ─────────────────────────────────────────────────────────────────────
+
 import { UsersModule } from './users/users.module';
-import { StellarModule } from './stellar/stellar.module';
-import { ProgressModule } from './progress/progress.module';
-import { CredentialsModule } from './credentials/credentials.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { LoggerModule } from './common/logger'; // eslint-disable-line @typescript-eslint/no-unused-vars
-import { HealthModule } from './health/health.module';
-import { MetricsModule } from './metrics/metrics.module';
-import { KycModule } from './kyc/kyc.module';
-import { LeaderboardModule } from './leaderboard/leaderboard.module';
-import { ForumsModule } from './forums/forums.module';
-import { RecommendationsModule } from './recommendations/recommendations.module';
-import { EmailModule } from './email/email.module';
-import { AnalyticsModule } from './analytics/analytics.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
-import { ModerationModule } from './moderation/moderation.module';
-import { ImportExportModule } from './import-export/import-export.module';
-import { SearchModule } from './search/search.module';
-import { BatchModule } from './batch/batch.module';
-import { ApiUsageModule } from './api-usage/api-usage.module';
-import { ApiUsageInterceptor } from './api-usage/api-usage.interceptor';
-import { QuizzesModule } from './quizzes/quizzes.module';
-import { CohortsModule } from './cohorts/cohorts.module';
-import { CdnModule } from './cdn/cdn.module';
-import { AccessControlModule } from './access-control/access-control.module';
-import { RateLimitModule } from './rate-limit/rate-limit.module';
-import { UserRateLimitGuard } from './rate-limit/user-rate-limit.guard';
-import { AuditModule } from './audit/audit.module';
-import { RemindersModule } from './reminders/reminders.module';
+import { AuthModule } from './auth/auth.module';
+import { CoursesModule } from './courses/courses.module';
+import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { CertificatesModule } from './certificates/certificates.module';
 import { ApiVersionModule } from './common/versioning';
 import { PayoutsModule } from './payouts/payouts.module';
 import { InstructorApplicationsModule } from './instructor-applications/instructor-applications.module';
 import { AssignmentsModule } from './assignments/assignments.module';
 import { StreaksModule } from './streaks/streaks.module';
+import { StudySessionsModule } from './study-sessions/study-sessions.module';
 import { BundlesModule } from './bundles/bundles.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { LiveSessionsModule } from './live-sessions/live-sessions.module';
 import { PaymentsModule } from './payments/payments.module';
+import { RewardsModule } from './rewards/rewards.module';
 import * as redisStore from 'cache-manager-redis-store';
-import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
 
+import { RateLimitModule } from './rate-limit/rate-limit.module';
+import { UserRateLimitGuard } from './rate-limit/user-rate-limit.guard';
 @Module({
   imports: [
-    SentryModule.forRoot(),
-    EventEmitterModule.forRoot(),
-    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
       validationSchema,
       validationOptions: {
+        allowUnknown: true,
         abortEarly: false,
       },
     }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const nodeEnv = config.get<string>('nodeEnv');
-        const synchronize = nodeEnv !== 'production' && nodeEnv !== 'staging';
-
-        // Validate that synchronize is not enabled in production/staging
-        DatabaseConfigValidator.validateSynchronizeConfig(nodeEnv, synchronize);
-
-        return {
-          type: 'postgres',
-          host: config.get<string>('database.host'),
-          port: config.get<number>('database.port'),
-          username: config.get<string>('database.username'),
-          password: config.get<string>('database.password'),
-          database: config.get<string>('database.name'),
-          autoLoadEntities: true,
-          synchronize,
-          extra: {
-            max: config.get<number>('database.poolSize') || 50,
-            idleTimeoutMillis: 30_000,
-            connectionTimeoutMillis: 5_000,
-          },
-        };
-      },
-    }),
-    CacheModule.registerAsync({
+    CacheModule.register({
       isGlobal: true,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        store: redisStore,
-        url: config.get<string>('redis.url'),
-        ttl: 60,
-      }),
+      store: redisStore,
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
     }),
-    DistributedLockModule,
-    ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        throttlers: [
-          {
-            ttl: config.get<number>('throttle.ttl') || 60000,
-            limit: config.get<number>('throttle.limit') || 100,
-          },
-        ],
-        storage: new ThrottlerStorageRedisService(
-          config.get<string>('redis.url') || 'redis://localhost:6379'
-        ),
+    TypeOrmModule.forRootAsync({
+      useFactory: async (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('database.host'),
+        port: configService.get('database.port'),
+        username: configService.get('database.username'),
+        password: configService.get('database.password'),
+        database: configService.get('database.name'),
+        entities: [User, Course, Enrollment, Certificate, Bundle, BundleCourse],
+        synchronize: configService.get('environment') !== 'production',
+        logging: configService.get('environment') !== 'production',
       }),
+      inject: [ConfigService],
     }),
-    AuthModule,
-    ApiKeysModule,
-    DatabaseModule,
-    CoursesModule,
     UsersModule,
-    StellarModule,
-    ProgressModule,
-    CredentialsModule,
-    LeaderboardModule,
-    ForumsModule,
-    NotificationsModule,
-    RemindersModule,
+    AuthModule,
+    CoursesModule,
+    EnrollmentsModule,
     CertificatesModule,
     PayoutsModule,
     InstructorApplicationsModule,
@@ -160,16 +98,29 @@ import { validationSchema } from './config/validation.schema';
     AnnouncementsModule,
     AssignmentsModule,
     StreaksModule,
+    StudySessionsModule,
     BundlesModule,
     SubscriptionsModule,
     LiveSessionsModule,
     PaymentsModule,
+    RewardsModule,
+    RateLimitModule,
     ApiVersionModule,
+    MonitoringModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: UserRateLimitGuard },
-    { provide: APP_INTERCEPTOR, useClass: ApiUsageInterceptor },
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: GlobalErrorInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: UserRateLimitGuard,
+    },
   ],
 })
 export class AppModule {}

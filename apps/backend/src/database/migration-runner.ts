@@ -23,12 +23,8 @@ async function main() {
         break;
       }
       case 'revert': {
-        const reverted = await AppDataSource.undoLastMigration();
-        if (reverted) {
-          process.stdout.write(`Reverted migration: ${reverted.name}\n`);
-        } else {
-          process.stdout.write('No migrations to revert.\n');
-        }
+        await AppDataSource.undoLastMigration();
+        process.stdout.write('Reverted last migration.\n');
         break;
       }
       case 'show': {

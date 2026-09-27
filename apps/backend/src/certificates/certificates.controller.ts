@@ -10,16 +10,20 @@ import {
   Request,
   ForbiddenException,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { CertificatesService, CertificateVerificationResult } from './certificates.service';
 import { CertificatePdfService } from './certificate-pdf.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { ConfigService } from '@nestjs/config';
 
 @ApiTags('certificates')
@@ -33,29 +37,50 @@ export class CertificatesController {
 
   // ── Manual issuance (admin / instructor trigger) ──────────────────────────
 
-  @Post(':userId/:courseId')
-  @UseGuards(JwtAuthGuard)
+  @Post('issue')
+  @UseGuards(AuthGuard(['jwt', 'api-key']), RolesGuard)
+  @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Manually issue a certificate for a completed course' })
+  @ApiOperation({ summary: 'Admin: issue a certificate for a fully completed course' })
+  @ApiBody({
+    schema: {
+      example: {
+        userId: 'uuid-of-student',
+        courseId: 'uuid-of-course',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Certificate issued successfully' })
+  @ApiResponse({ status: 400, description: 'Enrollment not found or course not fully completed' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 409, description: 'Certificate already issued' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'On-chain minting failed' })
+  async issueCertificate(@Body() body: { userId: string; courseId: string }) {
+    return this.certificatesService.issueCertificate(body.userId, body.courseId);
+  }
+
+  @Post(':userId/:courseId')
+  @UseGuards(AuthGuard(['jwt', 'api-key']), RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Legacy admin-only certificate issuance trigger' })
   @ApiParam({ name: 'userId', description: 'UUID of the student' })
   @ApiParam({ name: 'courseId', description: 'UUID of the completed course' })
   @ApiResponse({ status: 201, description: 'Certificate issued successfully' })
   @ApiResponse({ status: 400, description: 'Enrollment not found or course not completed' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 409, description: 'Certificate already issued' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'On-chain minting failed' })
-  async issueCertificate(
+  async issueCertificateByRoute(
     @Param('userId') userId: string,
     @Param('courseId') courseId: string,
-    @Request() req: { user: { id: string; role: string } },
   ) {
-    // Only allow admins or the student themselves to trigger manual issuance
-    if (req.user.id !== userId && req.user.role !== 'admin') {
-      throw new ForbiddenException('You can only issue certificates for your own account');
-    }
     return this.certificatesService.issueCertificate(userId, courseId);
   }
 
@@ -186,6 +211,64 @@ export class CertificatesController {
     const pdf = await this.certificatePdfService.generateCertificatePdf(certificate, baseUrl);
     return new StreamableFile(pdf, {
       disposition: `attachment; filename="certificate-${id}.pdf"`,
+      type: 'application/pdf',
+    });
+  }
+
+  // ── Download endpoint (issue #874) ────────────────────────────────────────
+
+  /**
+   * GET /v1/certificates/:id/download
+   *
+   * Returns a PDF certificate as a downloadable file.
+   * File name includes course slug and issue date for easy identification
+   * (e.g. "certificate-intro-to-stellar-2026-08-26.pdf").
+   *
+   * Authentication is required so only the certificate owner (or an admin)
+   * can download it.
+   */
+  @Get(':id/download')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Header('Content-Type', 'application/pdf')
+  @ApiOperation({
+    summary: 'Download a certificate PDF (issue #874)',
+    description:
+      'Streams the certificate as a PDF attachment. The filename embeds the course ' +
+      'title slug and the issue date so downloads are self-describing.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID of the certificate to download' })
+  @ApiResponse({ status: 200, description: 'PDF attachment with course/date in filename' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden — you do not own this certificate' })
+  @ApiResponse({ status: 404, description: 'Certificate not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async downloadCertificate(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string; role: string } },
+  ): Promise<StreamableFile> {
+    const certificate = await this.certificatesService.getCertificateWithRelations(id);
+
+    // Only the certificate owner or an admin may download
+    if (certificate.userId !== req.user.id && req.user.role !== 'admin') {
+      throw new ForbiddenException('You are not authorised to download this certificate');
+    }
+
+    const baseUrl = this.configService.get<string>('frontend.url') ?? 'http://localhost:3000';
+    const pdf = await this.certificatePdfService.generateCertificatePdf(certificate, baseUrl);
+
+    // Build a descriptive filename: certificate-<course-slug>-<YYYY-MM-DD>.pdf
+    const courseTitle = certificate.course?.title ?? 'course';
+    const courseSlug = courseTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60);
+    const issuedDate = certificate.issuedAt.toISOString().slice(0, 10); // YYYY-MM-DD
+    const filename = `certificate-${courseSlug}-${issuedDate}.pdf`;
+
+    return new StreamableFile(pdf, {
+      disposition: `attachment; filename="${filename}"`,
       type: 'application/pdf',
     });
   }

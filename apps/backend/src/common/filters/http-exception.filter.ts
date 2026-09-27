@@ -18,6 +18,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       message: typeof message === 'string' ? message : (message as any).message || message,
       timestamp: new Date().toISOString(),
+      correlationId: request.correlationId,
       path: request.url,
     };
 

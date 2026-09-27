@@ -1,5 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
@@ -11,6 +14,9 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class TokenService {
+  private readonly logger = new Logger(TokenService.name);
+  private readonly sessionTtlMs = 24 * 60 * 60 * 1000;
+
   constructor(
     private jwtService: JwtService,
     private usersService: UsersService,
@@ -19,6 +25,7 @@ export class TokenService {
     private refreshTokenRepo: Repository<RefreshToken>,
     @InjectRepository(ApiKey)
     private apiKeyRepo: Repository<ApiKey>,
+    @Optional() @Inject(CACHE_MANAGER) private cacheManager?: Cache,
   ) {}
 
   async issueTokenPair(userId: string, email: string, role = 'student') {
@@ -27,6 +34,7 @@ export class TokenService {
     await this.refreshTokenRepo.save(
       this.refreshTokenRepo.create({ tokenHash: hash, userId, expiresAt, revoked: false }),
     );
+    await this.cacheSession({ id: userId, email, role });
     return { access_token, refresh_token: rawRefresh };
   }
 
@@ -50,7 +58,26 @@ export class TokenService {
       where: { tokenHash: hash, revoked: false },
     });
     if (stored) await this.refreshTokenRepo.save({ ...stored, revoked: true });
+    if (stored) await this.clearSession(stored.userId);
     await this.auditService.log(AuditAction.LOGOUT, userId ?? stored?.userId ?? null, true);
+  }
+
+  private async cacheSession(session: { id: string; email: string; role: string }) {
+    if (!this.cacheManager) return;
+    try {
+      await this.cacheManager.set(`session:${session.id}`, session, this.sessionTtlMs);
+    } catch (error) {
+      this.logger.warn(`Unable to cache user session: ${(error as Error).message}`);
+    }
+  }
+
+  private async clearSession(userId: string) {
+    if (!this.cacheManager) return;
+    try {
+      await this.cacheManager.del(`session:${userId}`);
+    } catch (error) {
+      this.logger.warn(`Unable to clear user session cache: ${(error as Error).message}`);
+    }
   }
 
   async generateApiKey(userId: string, name: string) {

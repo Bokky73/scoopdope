@@ -21,7 +21,7 @@ export class KycCustomer {
   status: KycStatus;
 
   @Column({ nullable: true })
-  providerId: string;
+  providerId: string | null;
 
   /** Encrypted additional identity field data from SEP-0012 submissions */
   @Column({ nullable: true, type: 'text' })

@@ -6,6 +6,7 @@ import { NetworkMonitorService } from './network-monitor.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Deprecated } from '../common/versioning/deprecated.decorator';
 
 @ApiTags('stellar')
 @Controller('stellar')
@@ -16,6 +17,12 @@ export class StellarController {
   ) {}
 
   @Get('network-status')
+  @Deprecated({
+    since: '2025-06-01',
+    sunset: '2025-09-01',
+    migrationUrl: 'https://docs.example.com/api/v2/stellar/health',
+    reason: 'Use GET /v1/health instead',
+  })
   @ApiOperation({ summary: 'Get Stellar network health status' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })

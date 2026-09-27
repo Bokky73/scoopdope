@@ -128,8 +128,16 @@ export class QuizzesService {
 
     const attempt = await this.attemptRepo.findOne({
       where: { id: attemptId },
-      relations: ['answers', 'quiz'],
+      relations: ['answers', 'quiz', 'quiz.questions'],
     });
+
+    if (!attempt) {
+      throw new BadRequestException('Quiz attempt not found');
+    }
+
+    if (!attempt.quiz) {
+      throw new BadRequestException('Quiz not found for attempt');
+    }
 
     const totalPoints = attempt.quiz.questions.reduce((sum, q) => sum + q.points, 0);
     const totalScore = attempt.answers.reduce((sum, a) => sum + (a.points || 0), 0);

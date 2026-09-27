@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useVideoShortcuts } from '@/hooks/useVideoShortcuts';
+import { useStudyTimer } from '@/hooks/useStudyTimer';
 
 interface Props {
   src: string;
@@ -19,11 +20,15 @@ export function VideoPlayer({ src, lessonId, courseId, onComplete }: Props) {
   const [completed, setCompleted] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   // Timestamp of the last localStorage write; -Infinity ensures the first save
   // always goes through even if it happens before 10 s have elapsed.
   const lastSavedAtRef = useRef<number>(-Infinity);
   // Screen-reader announcement text surfaced via aria-live
   const [announcement, setAnnouncement] = useState('');
+
+  // #881: Track study time while the video is playing
+  useStudyTimer({ courseId, lessonId, active: isPlaying });
 
   const announce = useCallback((msg: string) => {
     // Clear then set so repeated identical messages still trigger the live region
@@ -143,6 +148,9 @@ export function VideoPlayer({ src, lessonId, courseId, onComplete }: Props) {
         onTimeUpdate={handleTimeUpdate}
         onError={handleError}
         className="w-full rounded-lg bg-black dark:bg-black"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
       />
     </div>
   );

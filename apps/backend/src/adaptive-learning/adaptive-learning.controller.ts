@@ -19,7 +19,7 @@ export class AdaptiveLearningController {
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   recordResult(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Body() body: { topicId: string; score: number },
   ) {
     return this.service.recordQuizResult(req.user.id, body.topicId, body.score);
@@ -33,7 +33,7 @@ export class AdaptiveLearningController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  getRecommendations(@Request() req) {
+  getRecommendations(@Request() req: { user: { id: string } }) {
     return this.service.getRecommendations(req.user.id);
   }
 
@@ -45,7 +45,7 @@ export class AdaptiveLearningController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  getPerformance(@Request() req) {
+  getPerformance(@Request() req: { user: { id: string } }) {
     return this.service.getPerformance(req.user.id);
   }
 
@@ -57,7 +57,7 @@ export class AdaptiveLearningController {
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  getVariant(@Request() req, @Param('experiment') experiment: string) {
+  getVariant(@Request() req: { user: { id: string } }, @Param('experiment') experiment: string) {
     return this.service.getOrAssignVariant(req.user.id, experiment);
   }
 
@@ -70,7 +70,7 @@ export class AdaptiveLearningController {
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   recordOutcome(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Param('experiment') experiment: string,
     @Body() body: { score: number },
   ) {

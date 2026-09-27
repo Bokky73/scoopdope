@@ -6,13 +6,14 @@ import { Enrollment } from '../enrollments/enrollment.entity';
 import { Progress } from '../progress/progress.entity';
 import { Review } from '../courses/review.entity';
 import { User } from '../users/user.entity';
+import { Course } from '../courses/course.entity';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsController } from './analytics.controller';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([CourseAnalytics, Enrollment, Progress, Review, User]),
+    TypeOrmModule.forFeature([CourseAnalytics, Enrollment, Progress, Review, User, Course]),
   ],
   providers: [AnalyticsService],
   controllers: [AnalyticsController],

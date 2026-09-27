@@ -75,15 +75,15 @@ export class LearningPathsController {
 }
 
 @ApiTags('admin/learning-paths')
-@Controller('admin/learning-paths')
+@Controller('instructor/learning-paths')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('admin', 'instructor')
 @ApiBearerAuth()
-export class AdminLearningPathsController {
+export class InstructorLearningPathsController {
   constructor(private readonly service: LearningPathsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all learning paths (including unpublished)' })
+  @ApiOperation({ summary: 'Get all learning paths (instructors see own + admins see all)' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

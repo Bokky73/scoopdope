@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsUUID } from 'class-validator';
 import { Trim, Sanitize } from 'class-sanitizer';
 import { StripHtmlSanitizer } from '../../common/sanitizers/strip-html.sanitizer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -6,6 +6,13 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { Transform } from 'class-transformer';
 
 export class CourseQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ description: 'Search query for the course search endpoint' })
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @Sanitize(StripHtmlSanitizer)
+  q?: string;
+
   @ApiPropertyOptional({ description: 'Full-text search on title and description' })
   @IsOptional()
   @IsString()
@@ -23,6 +30,13 @@ export class CourseQueryDto extends PaginationDto {
   @Sanitize(StripHtmlSanitizer)
   level?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by course category' })
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @Sanitize(StripHtmlSanitizer)
+  category?: string;
+
   @ApiPropertyOptional({ description: 'Filter by BCP-47 language code (e.g. "en", "es", "fr")' })
   @IsOptional()
   @IsString()
@@ -30,18 +44,16 @@ export class CourseQueryDto extends PaginationDto {
   @Sanitize(StripHtmlSanitizer)
   language?: string;
 
-  @ApiPropertyOptional({
-    description:
-      'Filter by one or more tags (comma-separated or repeated param). Returns courses that contain ALL specified tags.',
-    example: 'defi,nft',
-    type: [String],
-  })
+  @ApiPropertyOptional({ description: 'Filter by category ID (UUID)' })
   @IsOptional()
-  @Transform(({ value }) => {
-    if (Array.isArray(value)) return value.flatMap((v: string) => v.split(','));
-    if (typeof value === 'string') return value.split(',');
-    return value;
-  })
-  @IsString({ each: true })
-  tags?: string[];
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by category slug (e.g. "blockchain")' })
+  @IsOptional()
+  @IsString()
+  @Trim()
+  @Sanitize(StripHtmlSanitizer)
+  category?: string;
 }
+

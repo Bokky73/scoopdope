@@ -15,3 +15,6 @@ export { API_VERSION_METADATA, ApiVersion as ApiVersionDecorator } from './api-v
 export { ApiVersionMiddleware } from './api-version.middleware';
 export { ApiVersionInterceptor, RESOLVED_VERSION_KEY } from './api-version.interceptor';
 export { ApiVersionModule } from './api-version.module';
+export { DEPRECATED_KEY, Deprecated } from './deprecated.decorator';
+export type { DeprecationInfo } from './deprecated.decorator';
+export { DeprecationInterceptor } from './deprecation.interceptor';

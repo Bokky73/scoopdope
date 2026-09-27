@@ -7,19 +7,21 @@ export function MetricCard({
   label: string;
   value: string | number;
   sub?: string;
-  color?: 'blue' | 'green' | 'purple' | 'orange';
+  color?: 'blue' | 'green' | 'purple' | 'orange' | 'indigo';
 }) {
   const accent: Record<string, string> = {
     blue: 'border-blue-500 bg-blue-50 dark:bg-blue-950/30',
     green: 'border-green-500 bg-green-50 dark:bg-green-950/30',
     purple: 'border-purple-500 bg-purple-50 dark:bg-purple-950/30',
     orange: 'border-orange-500 bg-orange-50 dark:bg-orange-950/30',
+    indigo: 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30',
   };
   const text: Record<string, string> = {
     blue: 'text-blue-700 dark:text-blue-300',
     green: 'text-green-700 dark:text-green-300',
     purple: 'text-purple-700 dark:text-purple-300',
     orange: 'text-orange-700 dark:text-orange-300',
+    indigo: 'text-indigo-700 dark:text-indigo-300',
   };
   return (
     <div className={`rounded-lg border-l-4 p-5 ${accent[color]}`}>

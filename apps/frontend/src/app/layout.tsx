@@ -38,10 +38,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
+        {/* Skip-to-main link — visible on focus only, for keyboard/screen-reader users */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white focus:dark:bg-gray-900 focus:text-blue-600 focus:dark:text-blue-400 focus:font-semibold focus:rounded-lg focus:shadow-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        >
+          Skip to main content
+        </a>
         <TourProvider>
           <Navbar />
           {/* pb-16 reserves space for the bottom tab bar on mobile */}
-          <main className="pb-16 lg:pb-0">{children}</main>
+          <main id="main-content" className="pb-16 md:pb-0">{children}</main>
           <BottomMobileNav />
         </TourProvider>
         <NetworkStatus />

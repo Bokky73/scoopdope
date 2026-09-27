@@ -1,5 +1,6 @@
-// Freighter wallet integration
+// Wallet integration for Freighter and Stellar Lab
 // Freighter exposes window.freighter (or @stellar/freighter-api package)
+// Stellar Lab exposes window.stellarWallet (or similar interface)
 
 import api from './api';
 
@@ -10,11 +11,22 @@ declare global {
       getPublicKey: () => Promise<string>;
       getNetwork: () => Promise<string>;
     };
+    stellarWallet?: {
+      isConnected: () => Promise<boolean>;
+      getPublicKey: () => Promise<string>;
+      getNetwork: () => Promise<string>;
+    };
   }
 }
 
+export type WalletType = 'freighter' | 'stellar-lab';
+
 export function isFreighterInstalled(): boolean {
   return typeof window !== 'undefined' && !!window.freighter;
+}
+
+export function isStellarLabInstalled(): boolean {
+  return typeof window !== 'undefined' && !!window.stellarWallet;
 }
 
 export async function connectFreighter(): Promise<string> {
@@ -27,6 +39,29 @@ export async function connectFreighter(): Promise<string> {
   }
   const publicKey = await window.freighter!.getPublicKey();
   return publicKey;
+}
+
+export async function connectStellarLab(): Promise<string> {
+  if (!isStellarLabInstalled()) {
+    throw new Error('STELLAR_LAB_NOT_INSTALLED');
+  }
+  const connected = await window.stellarWallet!.isConnected();
+  if (!connected) {
+    throw new Error('STELLAR_LAB_NOT_CONNECTED');
+  }
+  const publicKey = await window.stellarWallet!.getPublicKey();
+  return publicKey;
+}
+
+export async function connectWallet(walletType: WalletType): Promise<string> {
+  switch (walletType) {
+    case 'freighter':
+      return connectFreighter();
+    case 'stellar-lab':
+      return connectStellarLab();
+    default:
+      throw new Error('UNKNOWN_WALLET_TYPE');
+  }
 }
 
 export async function fetchXlmBalance(address: string): Promise<string> {

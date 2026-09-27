@@ -1,9 +1,29 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { Reward } from '../rewards/reward.entity';
 
 export enum SubscriptionTier {
   FREE = 'free',
+  BASIC = 'basic',
+  PREMIUM = 'premium',
   PRO = 'pro',
-  ENTERPRISE = 'enterprise',
+}
+
+export enum UserRole {
+  STUDENT = 'student',
+  INSTRUCTOR = 'instructor',
+  ADMIN = 'admin',
+}
+
+export enum Role {
+  ADMIN = 'admin',
+  INSTRUCTOR = 'instructor',
+  STUDENT = 'student',
+}
+
+export enum UserStatus {
+  ACTIVE = 'active',
+  SUSPENDED = 'suspended',
+  DEACTIVATED = 'deactivated',
 }
 
 @Entity('users')
@@ -14,94 +34,29 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column()
   username: string;
 
-  @Column({ select: false })
+  @Column()
   passwordHash: string;
 
-  @Column({ nullable: true })
-  avatar: string;
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.STUDENT })
+  role: UserRole;
 
-  @Column({ nullable: true, type: 'text' })
-  bio: string;
-
-  @Column({ nullable: true })
-  stellarPublicKey: string;
-
-  @Column({ default: 'student' })
-  role: string;
-
-  @Column({ default: false })
-  isBanned: boolean;
-
-  @Column({ default: false })
-  isVerified: boolean;
-
-  @Column({ nullable: true })
-  deletedAt: Date;
-
-  @Column({ nullable: true, type: 'varchar' })
-  verificationToken: string | null;
-
-  @Column({ nullable: true, type: 'datetime' })
-  verificationTokenExpiresAt: Date | null;
-
-  @Column({ default: false })
-  mfaEnabled: boolean;
-
-  @Column({ nullable: true })
-  mfaSecret: string | null;
-
-  @Column({ type: 'simple-array', nullable: true, default: null })
-  mfaBackupCodes: string[] | null;
-
-  @Column({ unique: true, nullable: true })
-  referralCode: string;
-
-  @Column({ nullable: true, type: 'varchar' })
-  referredBy: string | null;
-
-  @Column({ default: 0 })
-  currentStreak: number;
-
-  @Column({ default: 0 })
-  longestStreak: number;
-
-  @Column({ nullable: true, type: 'datetime' })
-  lastActivityAt: Date | null;
-
-  @Column({
-    type: 'enum',
-    enum: SubscriptionTier,
-    default: SubscriptionTier.FREE,
-  })
+  @Column({ type: 'enum', enum: SubscriptionTier, default: SubscriptionTier.FREE })
   subscriptionTier: SubscriptionTier;
 
-  @Column({ nullable: true })
-  stripeCustomerId: string;
+  @Column({ nullable: true, type: 'text' })
+  bio: string | null;
 
   @Column({ nullable: true })
-  stripeSubscriptionId: string;
+  avatarUrl: string | null;
 
-  @Column({ nullable: true, type: 'datetime' })
-  subscriptionExpiresAt: Date | null;
+  @Column({ default: false })
+  isEmailVerified: boolean;
 
-  @Column('simple-json', {
-    nullable: true,
-    default: {
-      courseUpdates: true,
-      liveSessions: true,
-      tokenRewards: true,
-      pushEnabled: false,
-    },
-  })
-  notificationPreferences: {
-    courseUpdates: boolean;
-    liveSessions: boolean;
-    tokenRewards: boolean;
-    pushEnabled: boolean;
-  };
+  @Column({ nullable: true })
+  lastLogin: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

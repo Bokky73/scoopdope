@@ -108,8 +108,8 @@ export class MigrationRunnerService {
       })),
       ...pendingMigrations.map((pm) => ({
         id: -1,
-        timestamp: this.extractTimestamp(pm.name),
-        name: pm.name,
+        timestamp: this.extractTimestamp(pm.name ?? ''),
+        name: pm.name ?? 'unknown',
         status: 'pending' as const,
       })),
     ];

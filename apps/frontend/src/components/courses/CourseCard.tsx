@@ -3,12 +3,22 @@ import Image from 'next/image';
 import { BookmarkButton } from './BookmarkButton';
 import { CompareCheckbox } from './CompareCheckbox';
 
+export type Category = {
+  id: string;
+  name: string;
+  slug: string;
+  iconName: string | null;
+};
+
 export type Course = {
   id: string;
   title: string;
   level: 'beginner' | 'intermediate' | 'advanced';
   language?: string;
+  /** Legacy plain-string category (used when no full Category object is available). */
   category?: string;
+  /** Full category object with icon name. */
+  categoryObj?: Category | null;
   durationHours?: number;
   price?: number;
   rating?: number;
@@ -17,7 +27,22 @@ export type Course = {
   thumbnailUrl?: string;
 };
 
+/** Renders a FontAwesome icon name as a <i> element; falls back gracefully. */
+function CategoryIcon({ iconName }: { iconName: string | null }) {
+  if (!iconName) return null;
+  return (
+    <i
+      className={`fa-solid ${iconName} text-blue-500 dark:text-blue-400 mr-1 text-[10px]`}
+      aria-hidden="true"
+    />
+  );
+}
+
 export function CourseCard({ course, observerRef }: { course: Course; observerRef?: React.Ref<HTMLDivElement> }) {
+  // Prefer the full category object; fall back to the plain string.
+  const categoryName = course.categoryObj?.name ?? course.category;
+  const categoryIcon = course.categoryObj?.iconName ?? null;
+
   return (
     <div
       ref={observerRef}
@@ -44,7 +69,15 @@ export function CourseCard({ course, observerRef }: { course: Course; observerRe
         <div className="flex flex-wrap gap-1.5 text-xs text-gray-500 dark:text-gray-400">
           <span className="capitalize">{course.level}</span>
           {course.language && <><span>·</span><span className="uppercase">{course.language}</span></>}
-          {course.category && <><span>·</span><span>{course.category}</span></>}
+          {categoryName && (
+            <>
+              <span>·</span>
+              <span className="flex items-center">
+                <CategoryIcon iconName={categoryIcon} />
+                {categoryName}
+              </span>
+            </>
+          )}
           {course.durationHours != null && <><span>·</span><span>{course.durationHours}h</span></>}
           {course.rating != null && <><span>·</span><span className="text-yellow-500">★ {course.rating.toFixed(1)}</span></>}
         </div>
@@ -59,7 +92,11 @@ export function CourseCard({ course, observerRef }: { course: Course; observerRe
             </span>
           )}
           <div className="flex items-center gap-2 ml-auto">
-            <Link href={`/courses/${course.id}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            <Link
+              href={`/courses/${course.id}`}
+              aria-label={`View ${course.title}`}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+            >
               View →
             </Link>
             <Link
@@ -75,3 +112,4 @@ export function CourseCard({ course, observerRef }: { course: Course; observerRe
     </div>
   );
 }
+

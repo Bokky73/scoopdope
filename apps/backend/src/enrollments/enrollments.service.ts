@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
   InternalServerErrorException,
   Logger,
@@ -12,6 +13,8 @@ import { Enrollment } from './enrollment.entity';
 import { EnrollmentConfirmedEvent } from './enrollment-confirmed.event';
 import { PrerequisitesService } from '../courses/prerequisites.service';
 import { CourseVersioningService } from '../courses/course-versioning.service';
+import { CoursesService } from '../courses/courses.service';
+import { CourseStatus } from '../courses/course.entity';
 import { MetricsService } from '../metrics/metrics.service';
 import { StellarService } from '../stellar/stellar.service';
 
@@ -25,11 +28,19 @@ export class EnrollmentsService {
     private eventEmitter: EventEmitter2,
     private prereqService: PrerequisitesService,
     private versioningService: CourseVersioningService,
+    private coursesService: CoursesService,
     private metrics: MetricsService,
     private stellarService: StellarService,
   ) {}
 
   async enroll(userId: string, courseId: string, adminOverride = false): Promise<Enrollment> {
+    // Throws NotFoundException (404) when the course doesn't exist (or is soft-deleted).
+    const course = await this.coursesService.findOne(courseId);
+
+    if (course.status !== CourseStatus.PUBLISHED && !adminOverride) {
+      throw new ForbiddenException('Course is not open for enrollment');
+    }
+
     const existing = await this.repo.findOne({ where: { userId, courseId } });
     if (existing) throw new ConflictException('Already enrolled in this course');
 
@@ -100,6 +111,24 @@ export class EnrollmentsService {
     this.metrics.incrementEnrollment(courseId, 'all');
 
     return enrollment;
+  }
+
+  /**
+   * Count total enrollments for a course
+   */
+  async countByCoursId(courseId: string): Promise<number> {
+    return this.repo.count({ where: { courseId } });
+  }
+
+  /**
+   * Count completed enrollments for a course
+   */
+  async countCompletedByCourseId(courseId: string): Promise<number> {
+    return this.repo
+      .createQueryBuilder('enrollment')
+      .where('enrollment.courseId = :courseId', { courseId })
+      .andWhere('enrollment.completedAt IS NOT NULL')
+      .getCount();
   }
 
   async unenroll(userId: string, courseId: string): Promise<void> {

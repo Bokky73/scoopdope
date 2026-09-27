@@ -24,6 +24,20 @@ export class OAuthService {
     return this.tokenService.issueTokenPair(user.id, user.email, user.role);
   }
 
+  async microsoftLogin(profile: { id: string; email: string; displayName: string; picture?: string }) {
+    let user = await this.usersService.findByEmail(profile.email);
+    if (!user) {
+      user = await this.usersService.create({
+        email: profile.email,
+        passwordHash: '',
+        isVerified: true,
+        referralCode: crypto.randomBytes(6).toString('hex'),
+        avatar: profile.picture ?? null,
+      });
+    }
+    return this.tokenService.issueTokenPair(user.id, user.email, user.role);
+  }
+
   generateStellarChallenge(publicKey: string) {
     const nonce = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);

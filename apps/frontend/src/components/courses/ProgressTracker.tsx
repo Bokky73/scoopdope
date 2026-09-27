@@ -366,10 +366,28 @@ const ModuleRow = memo(
   }
 );
 
+// ── Time remaining formatting ─────────────────────────────────────────────────
+
+function formatTimeRemaining(estimate: CourseProgressPayload['estimatedCompletionTime']) {
+  if (!estimate || estimate.remainingLessons === 0) return null;
+
+  const hours = Math.floor(estimate.remainingMinutes / 60);
+  const minutes = estimate.remainingMinutes % 60;
+  const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+  if (estimate.estimatedDaysRemaining == null) {
+    return `~${duration} left`;
+  }
+
+  const days = estimate.estimatedDaysRemaining;
+  return `~${duration} left · ~${days} ${days === 1 ? 'day' : 'days'} at your pace`;
+}
+
 // ── Overall summary card ──────────────────────────────────────────────────────
 
 const OverallCard = memo(function OverallCard({ data }: { data: CourseProgressPayload }) {
   const pct = Math.round(data.overallProgressPct);
+  const timeRemainingLabel = formatTimeRemaining(data.estimatedCompletionTime);
 
   const statusLabel =
     pct === 100
@@ -431,6 +449,12 @@ const OverallCard = memo(function OverallCard({ data }: { data: CourseProgressPa
                   month: 'short',
                   day: 'numeric',
                 })}
+              </span>
+            )}
+            {timeRemainingLabel && (
+              <span className="flex items-center gap-1" data-testid="time-remaining">
+                <Clock className="w-3 h-3" aria-hidden="true" />
+                {timeRemainingLabel}
               </span>
             )}
           </div>

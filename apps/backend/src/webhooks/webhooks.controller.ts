@@ -44,7 +44,10 @@ export class WebhooksController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update a webhook' })
   update(@Request() req: { user: { userId: string } }, @Param('id') id: string, @Body() dto: UpdateWebhookDto) {
-    return this.service.update(req.user.userId, id, dto);
+    return this.service.update(req.user.userId, id, {
+      ...dto,
+      events: dto.events?.join(','),
+    });
   }
 
   @Delete(':id')

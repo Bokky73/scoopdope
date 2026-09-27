@@ -47,7 +47,6 @@ export default function GlobalError({
         `}</style>
         <main className="ge-root" role="alert">
           <div className="ge-error">
-          <div role="alert" className="max-w-lg space-y-6">
             <div className="text-6xl" aria-hidden="true">
               ⚠️
             </div>

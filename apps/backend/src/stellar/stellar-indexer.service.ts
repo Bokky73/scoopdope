@@ -80,7 +80,8 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
         await this.cacheManager.set(LAST_LEDGER_KEY, latestLedger, 0);
       }
     } catch (err) {
-      this.logger.error(`Poll error: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Poll error: ${message}`);
     }
   }
 

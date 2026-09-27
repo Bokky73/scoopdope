@@ -10,6 +10,9 @@ export enum NotificationType {
   ANNOUNCEMENT = 'announcement',
   WAITLIST_JOINED = 'waitlist_joined',
   WAITLIST_ENROLLED = 'waitlist_enrolled',
+  // #867: new types for the notification center
+  CERTIFICATE = 'certificate',
+  UPDATE = 'update',
 }
 
 @Entity('notifications')
@@ -23,7 +26,12 @@ export class Notification {
   @Column({ type: 'enum', enum: NotificationType })
   type: NotificationType;
 
-  @Column()
+  /** Short heading shown in the notification bell (e.g. "New Announcement"). */
+  @Column({ nullable: true })
+  title: string | null;
+
+  /** Full notification body. */
+  @Column({ type: 'text' })
   message: string;
 
   @Column({ default: false })

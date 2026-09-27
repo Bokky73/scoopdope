@@ -25,7 +25,9 @@ export default () => ({
     username: process.env.DATABASE_USER!,
     password: process.env.DATABASE_PASSWORD!,
     name: process.env.DATABASE_NAME!,
-    poolSize: parseInt(process.env.DATABASE_POOL_SIZE || '50', 10),
+    poolMin: parseInt(process.env.DATABASE_POOL_MIN || '5', 10),
+    poolMax: parseInt(process.env.DATABASE_POOL_MAX || '20', 10),
+    idleTimeoutMs: parseInt(process.env.DATABASE_IDLE_TIMEOUT_MS || '30000', 10),
   },
 
   jwt: {
@@ -64,6 +66,12 @@ export default () => ({
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback',
+  },
+
+  microsoft: {
+    clientId: process.env.MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+    callbackUrl: process.env.MICROSOFT_CALLBACK_URL || 'http://localhost:3000/auth/microsoft/callback',
   },
 
   frontend: {
@@ -113,5 +121,10 @@ export default () => ({
 
   payouts: {
     batchSize: parseInt(process.env.PAYOUT_BATCH_SIZE ?? '500', 10),
+  },
+
+  rewards: {
+    moduleCompletion: parseInt(process.env.REWARD_MODULE_COMPLETION ?? '25', 10),
+    courseCompletion: parseInt(process.env.REWARD_COURSE_COMPLETION ?? '100', 10),
   },
 });

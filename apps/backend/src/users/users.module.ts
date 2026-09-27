@@ -7,10 +7,12 @@ import { StellarModule } from '../stellar/stellar.module';
 import { AuditModule } from '../audit/audit.module';
 import { Post } from '../forums/post.entity';
 import { Review } from '../courses/review.entity';
+import { Enrollment } from '../enrollments/enrollment.entity';
+import { Course } from '../courses/course.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Post, Review]),
+    TypeOrmModule.forFeature([User, Post, Review, Enrollment, Course]),
     forwardRef(() => StellarModule),
     AuditModule,
   ],

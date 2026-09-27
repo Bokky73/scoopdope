@@ -33,7 +33,7 @@ import { NonProductionGuard } from './non-production.guard';
  *    applied* migration, so it should be used with caution.
  */
 @ApiTags('database')
-@ApiBearerAuth('JWT-auth')
+@ApiBearerAuth()
 @Controller('database')
 @UseGuards(JwtAuthGuard, RolesGuard, NonProductionGuard)
 @Roles('admin')

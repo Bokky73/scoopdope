@@ -163,7 +163,7 @@ export class LiveSessionsService {
 
   private async sendCalendarInvites(session: LiveSession): Promise<void> {
     const users = await this.getMembers(session.cohortId);
-    const frontendUrl = this.config.get<string>('frontend.url');
+    const frontendUrl = this.config.get<string>('frontend.url') ?? 'http://localhost:3001';
     const icsContent = this.buildIcs(session, frontendUrl);
     const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
 
@@ -184,7 +184,7 @@ export class LiveSessionsService {
 
   private async notifyMembers(session: LiveSession, label: string): Promise<void> {
     const users = await this.getMembers(session.cohortId);
-    const frontendUrl = this.config.get<string>('frontend.url');
+    const frontendUrl = this.config.get<string>('frontend.url') ?? 'http://localhost:3001';
     const timeLabel = label === '24h' ? '24 hours' : '1 hour';
     const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
 

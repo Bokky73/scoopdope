@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, IsNull } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -10,11 +10,20 @@ import { UsersService } from '../users/users.service';
 import { StreaksService } from '../streaks/streaks.service';
 import { BundlesService } from '../bundles/bundles.service';
 import { MetricsService } from '../metrics/metrics.service';
+import { Course } from '../courses/course.entity';
+import { CourseModule as CourseModuleEntity } from '../courses/course-module.entity';
+import { Enrollment } from '../enrollments/enrollment.entity';
+
+/** Average minutes to allow per lesson when a course doesn't record durations. */
+const DEFAULT_LESSON_MINUTES = 10;
 
 @Injectable()
 export class ProgressService {
   constructor(
     @InjectRepository(Progress) private repo: Repository<Progress>,
+    @InjectRepository(Course) private courseRepo: Repository<Course>,
+    @InjectRepository(CourseModuleEntity) private moduleRepo: Repository<CourseModuleEntity>,
+    @InjectRepository(Enrollment) private enrollmentRepo: Repository<Enrollment>,
     private stellarService: StellarService,
     private credentialsService: CredentialsService,
     private usersService: UsersService,
@@ -56,6 +65,15 @@ export class ProgressService {
     }
 
     const saved = await this.repo.save(progress);
+
+    // Emit progress.updated so ProgressSyncGateway can broadcast to other devices
+    this.eventEmitter.emit('progress.updated', {
+      userId,
+      courseId: dto.courseId,
+      lessonId: saved.lessonId,
+      progressPct: saved.progressPct,
+      updatedAt: saved.updatedAt.toISOString(),
+    });
 
     // Update bundle progress if applicable
     if (dto.progressPct >= 100) {
@@ -106,52 +124,94 @@ export class ProgressService {
     return this.repo.find({ where: { userId }, order: { updatedAt: 'DESC' } });
   }
 
-  /**
-   * Recalculate progress percentages for all enrolled users in a course after a lesson is deleted.
-   *
-   * Because progress is stored as a percentage (not per-lesson completion flags),
-   * we scale each user's existing progressPct proportionally:
-   *   newPct = round(oldPct * totalLessonsBeforeDeletion / totalLessonsAfterDeletion)
-   * clamped to [0, 100].  Users who had already reached 100% retain 100% only
-   * if they still have 100% after the scale (i.e., they keep their completion).
-   *
-   * If the deleted lesson was the last lesson in the course (totalLessonsAfterDeletion === 0),
-   * all in-progress records are left unchanged and only the lessonId pointer is cleared
-   * for records that referenced the deleted lesson.
-   *
-   * @param courseId                   ID of the course the lesson belonged to
-   * @param deletedLessonId            ID of the lesson that was just removed
-   * @param totalLessonsBeforeDeletion Total lesson count before the deletion
-   * @param totalLessonsAfterDeletion  Total lesson count after the deletion
-   */
-  async recalcOnLessonDeletion(
-    courseId: string,
-    deletedLessonId: string,
-    totalLessonsBeforeDeletion: number,
-    totalLessonsAfterDeletion: number,
-  ): Promise<void> {
-    const records = await this.repo.find({ where: { courseId } });
-    if (records.length === 0) return;
+  /** Per-module/per-lesson completion breakdown for GET /courses/:courseId/progress */
+  async getCourseProgress(userId: string, courseId: string) {
+    const enrollment = await this.enrollmentRepo.findOne({ where: { userId, courseId } });
+    if (!enrollment) throw new ForbiddenException('You are not enrolled in this course');
 
-    for (const record of records) {
-      // Clear dangling lessonId reference
-      if (record.lessonId === deletedLessonId) {
-        record.lessonId = undefined as unknown as string;
-      }
+    const course = await this.courseRepo.findOne({ where: { id: courseId, isDeleted: false } });
+    if (!course) throw new NotFoundException('Course not found');
 
-      if (totalLessonsAfterDeletion > 0 && totalLessonsBeforeDeletion > 0) {
-        const scaled = Math.round(
-          (record.progressPct * totalLessonsBeforeDeletion) / totalLessonsAfterDeletion,
-        );
-        record.progressPct = Math.min(100, Math.max(0, scaled));
+    const modules = await this.moduleRepo.find({
+      where: { courseId },
+      relations: ['lessons'],
+      order: { order: 'ASC' },
+    });
+    for (const m of modules) m.lessons.sort((a, b) => a.order - b.order);
 
-        // If newly below 100, clear the completedAt timestamp
-        if (record.progressPct < 100 && record.completedAt) {
-          record.completedAt = undefined as unknown as Date;
-        }
-      }
-    }
+    const progress = await this.repo.findOne({ where: { userId, courseId } });
+    const overallCompletionPercentage = progress?.progressPct ?? 0;
 
-    await this.repo.save(records);
+    const flatLessons = modules.flatMap((m) => m.lessons);
+    const totalLessons = flatLessons.length;
+    const completedCount = Math.min(
+      totalLessons,
+      Math.round((overallCompletionPercentage / 100) * totalLessons),
+    );
+
+    let seen = 0;
+    const lessonsResponse: any[] = [];
+    const modulesResponse = modules.map((m) => {
+      const lessons = m.lessons.map((lesson) => {
+        const index = seen++;
+        const status: 'completed' | 'in_progress' | 'not_started' =
+          index < completedCount
+            ? 'completed'
+            : lesson.id === progress?.lessonId
+              ? 'in_progress'
+              : 'not_started';
+        const entry = {
+          id: lesson.id,
+          title: lesson.title,
+          moduleId: m.id,
+          status,
+          last_accessed_at: lesson.id === progress?.lessonId ? progress?.updatedAt ?? null : null,
+        };
+        lessonsResponse.push(entry);
+        return entry;
+      });
+
+      const moduleCompleted = lessons.length > 0 && lessons.every((l) => l.status === 'completed');
+      const moduleStarted = lessons.some((l) => l.status !== 'not_started');
+
+      return {
+        id: m.id,
+        title: m.title,
+        status: moduleCompleted ? 'completed' : moduleStarted ? 'in_progress' : 'not_started',
+        completionPercentage: lessons.length
+          ? Math.round((lessons.filter((l) => l.status === 'completed').length / lessons.length) * 100)
+          : 0,
+      };
+    });
+
+    // Estimated time remaining, based on the student's own completion pace so far.
+    const remainingLessons = totalLessons - completedCount;
+    const remainingMinutes = flatLessons
+      .slice(completedCount)
+      .reduce((sum, l) => sum + (l.durationMinutes || DEFAULT_LESSON_MINUTES), 0);
+
+    const daysSinceEnrollment = Math.max(
+      1,
+      Math.ceil((Date.now() - enrollment.enrolledAt.getTime()) / (24 * 60 * 60 * 1000)),
+    );
+    const pace = completedCount / daysSinceEnrollment; // lessons/day
+    const estimatedDaysRemaining = pace > 0 ? Math.ceil(remainingLessons / pace) : null;
+
+    const user = await this.usersService.findById(userId);
+
+    return {
+      courseId,
+      courseTitle: course.title,
+      overall_completion_percentage: overallCompletionPercentage,
+      modules: modulesResponse,
+      lessons: lessonsResponse,
+      estimatedCompletionTime: {
+        remainingLessons,
+        remainingMinutes,
+        estimatedDaysRemaining,
+      },
+      streak: user?.currentStreak ?? 0,
+      lastActivityAt: user?.lastActivityAt ?? null,
+    };
   }
 }

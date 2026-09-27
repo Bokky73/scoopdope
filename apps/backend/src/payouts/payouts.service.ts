@@ -61,11 +61,13 @@ export class PayoutsService {
             take: batchSize,
           });
         } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const stack = error instanceof Error ? error.stack : undefined;
           this.logger.error(
-            `Payout batch fetch failed for course ${course.id} at offset ${offset}: ${error.message}`,
-            error.stack,
+            `Payout batch fetch failed for course ${course.id} at offset ${offset}: ${message}`,
+            stack,
           );
-          failedBatches.push({ cursor: offset, error: error.message });
+          failedBatches.push({ cursor: offset, error: message });
           offset += batchSize;
           continue;
         }
@@ -154,7 +156,8 @@ export class PayoutsService {
       this.logger.log(`Payout processed for instructor ${payout.instructor.email}: $${payout.instructorShare}`);
     } catch (error) {
       payout.status = 'failed';
-      this.logger.error(`Payout failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Payout failed: ${message}`);
     }
 
     return this.payoutsRepository.save(payout);

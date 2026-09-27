@@ -1,11 +1,12 @@
 import { Controller, Post, Get, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SurveysService } from './surveys.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
 @ApiTags('surveys')
+@ApiBearerAuth()
 @Controller('v1/surveys')
 @UseGuards(JwtAuthGuard)
 export class SurveysController {
@@ -82,7 +83,7 @@ export class SurveysController {
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async submitResponse(
-    @Request() req,
+    @Request() req: { user: { id: string } },
     @Param('surveyId') surveyId: string,
     @Body() body: { answers: Record<string, string | number>; isAnonymous?: boolean },
   ) {

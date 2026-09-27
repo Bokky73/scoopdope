@@ -34,7 +34,7 @@ export class Announcement {
   title: string;
 
   @Column('text')
-  body: string;
+  content: string;
 
   @CreateDateColumn()
   createdAt: Date;

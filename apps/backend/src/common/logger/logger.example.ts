@@ -23,7 +23,8 @@ export class ExampleService {
       // Simulate some operation
       throw new Error('Example error for demonstration');
     } catch (error) {
-      this.logger.error('Error occurred in example method', error.stack);
+      const message = error instanceof Error ? error.stack : String(error);
+      this.logger.error('Error occurred in example method', message);
     }
 
     // Using child logger for specific context

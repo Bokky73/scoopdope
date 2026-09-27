@@ -1,11 +1,12 @@
 import { Controller, Post, Get, Param, Body, UseGuards, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PayoutsService } from './payouts.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
 @ApiTags('payouts')
+@ApiBearerAuth()
 @Controller('v1/payouts')
 export class PayoutsController {
   constructor(private payoutsService: PayoutsService) {}

@@ -2,15 +2,14 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { Queue, Worker, QueueScheduler, Job } from 'bullmq';
-import { BatchService } from './batch.service';
+import { Queue, Worker, Job } from 'bullmq';
+import { BatchService, BatchPayloadItem } from './batch.service';
 
 @Injectable()
 export class BatchQueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BatchQueueService.name);
   public queue: Queue;
   public dlq: Queue;
-  private scheduler: QueueScheduler;
   private worker: Worker;
 
   constructor(
@@ -39,10 +38,6 @@ export class BatchQueueService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    this.scheduler = new QueueScheduler('batch', {
-      connection: { url: redisUrl },
-    });
-
     this.worker = new Worker(
       'batch',
       async (job: Job) => {
@@ -66,8 +61,8 @@ export class BatchQueueService implements OnModuleInit, OnModuleDestroy {
 
     this.worker.on('failed', async (job, error) => {
       if (!job) return;
-      const maxAttempts = job.opts.attempts ?? maxRetries;
-      const isTerminalFailure = job.attemptsMade >= maxAttempts;
+      const maxAttempts = job.opts.attempts ?? maxRetries ?? 1;
+      const isTerminalFailure = (job.attemptsMade ?? 0) >= maxAttempts;
       const failedReason = error?.message || 'Unknown batch failure';
 
       if (isTerminalFailure) {
@@ -86,7 +81,6 @@ export class BatchQueueService implements OnModuleInit, OnModuleDestroy {
     await Promise.all([
       this.queue.waitUntilReady(),
       this.dlq.waitUntilReady(),
-      this.scheduler.waitUntilReady(),
       this.worker.waitUntilReady(),
     ]);
   }
@@ -94,19 +88,18 @@ export class BatchQueueService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     await Promise.all([
       this.worker.close(),
-      this.scheduler.close(),
       this.queue.close(),
       this.dlq.close(),
     ]);
   }
 
-  async createUserBatch(payload: Record<string, any>[], createdById: string) {
+  async createUserBatch(payload: BatchPayloadItem[], createdById: string) {
     const batchJob = await this.batchService.createUserBatch(payload, createdById);
     await this.queue.add('users', { batchJobId: batchJob.id });
     return batchJob;
   }
 
-  async createCourseBatch(payload: Record<string, any>[], createdById: string) {
+  async createCourseBatch(payload: BatchPayloadItem[], createdById: string) {
     const batchJob = await this.batchService.createCourseBatch(payload, createdById);
     await this.queue.add('courses', { batchJobId: batchJob.id });
     return batchJob;

@@ -1,4 +1,5 @@
 import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { UserRateLimitService } from './user-rate-limit.service';
 import { RATE_LIMIT_METADATA, RateLimitConfig } from './rate-limit.constants';
@@ -8,24 +9,26 @@ export class UserRateLimitGuard implements CanActivate {
   constructor(
     private readonly rateLimitService: UserRateLimitService,
     private readonly reflector: Reflector,
+    private readonly jwtService: JwtService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
 
-    const userId: string | null = request.user?.id || null;
+    const userId: string | null =
+      request.user?.id || this.getVerifiedBearerSubject(request.headers?.authorization);
     const ip: string =
       request.ip ||
       request.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
       request.connection?.remoteAddress ||
       'unknown';
     const userRole: string | undefined = request.user?.role;
-    const authenticated = !!request.user?.id;
+    const authenticated = !!userId;
 
-    const overrideConfig = this.reflector.get<Partial<RateLimitConfig> | undefined>(
+    const overrideConfig = this.reflector.getAllAndOverride<Partial<RateLimitConfig> | undefined>(
       RATE_LIMIT_METADATA,
-      context.getHandler(),
+      [context.getHandler(), context.getClass()],
     );
 
     const role = this.rateLimitService.resolveRole(userRole, authenticated);
@@ -58,5 +61,18 @@ export class UserRateLimitGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private getVerifiedBearerSubject(authorization?: string): string | null {
+    if (!authorization?.startsWith('Bearer ')) return null;
+
+    try {
+      const decoded = this.jwtService.verify<{ sub?: unknown }>(
+        authorization.slice(7),
+      );
+      return typeof decoded.sub === 'string' ? decoded.sub : null;
+    } catch {
+      return null;
+    }
   }
 }

@@ -1,0 +1,101 @@
+{
+  "contract_name": "shared",
+  "version": "1.0.0",
+  "network": "stellar/soroban",
+  "description": "Shared RBAC, pausability, cross-contract call tracking, and upgrade management utilities.",
+  "functions": [
+    {
+      "name": "initialize",
+      "doc": "Initialize the contract with an admin, governance address, and semver version string.",
+      "inputs": [
+        { "name": "admin", "type": "address" },
+        { "name": "governance", "type": "address" },
+        { "name": "version", "type": "string" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "set_role",
+      "doc": "Assign a role to an address. Admin only.",
+      "inputs": [
+        { "name": "target", "type": "address" },
+        { "name": "role", "type": "Role" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_role",
+      "doc": "Return the current role of an address.",
+      "inputs": [
+        { "name": "target", "type": "address" }
+      ],
+      "outputs": [{ "type": "Role" }]
+    },
+    {
+      "name": "has_permission",
+      "doc": "Return true if an address holds a role that grants the given permission.",
+      "inputs": [
+        { "name": "target", "type": "address" },
+        { "name": "permission", "type": "Permission" }
+      ],
+      "outputs": [{ "type": "bool" }]
+    },
+    {
+      "name": "pause",
+      "doc": "Pause the contract. Admin only.",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "name": "unpause",
+      "doc": "Unpause the contract. Admin only.",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "name": "is_paused",
+      "doc": "Return true if the contract is currently paused.",
+      "inputs": [],
+      "outputs": [{ "type": "bool" }]
+    },
+    {
+      "name": "get_version",
+      "doc": "Return the current semver version string.",
+      "inputs": [],
+      "outputs": [{ "type": "string" }]
+    },
+    {
+      "name": "get_admin",
+      "doc": "Return the current admin address.",
+      "inputs": [],
+      "outputs": [{ "type": "address" }]
+    }
+  ],
+  "types": {
+    "Role": {
+      "enum": ["Admin", "Instructor", "Student"]
+    },
+    "Permission": {
+      "enum": [
+        "CreateCourse",
+        "EnrollStudent",
+        "IssueCredential",
+        "MintToken",
+        "ManageUsers",
+        "Upgrade"
+      ]
+    },
+    "CrossContractCallRecord": {
+      "fields": [
+        { "name": "id", "type": "u64" },
+        { "name": "caller", "type": "address" },
+        { "name": "target_contract", "type": "address" },
+        { "name": "method", "type": "symbol" },
+        { "name": "status", "type": "symbol" },
+        { "name": "created_at", "type": "u64" },
+        { "name": "executed_at", "type": "u64" }
+      ]
+    }
+  },
+  "events": []
+}

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -35,7 +36,7 @@ export class AuthService {
 
   async register(email: string, password: string, refCode?: string) {
     const existing = await this.usersService.findByEmail(email);
-    if (existing) throw new BadRequestException('Email already in use');
+    if (existing) throw new ConflictException('Email already in use');
 
     const passwordHash = await bcryptLib.hash(password, 10);
     const { token, hash, expiresAt } = this.tokenService.generateOpaqueToken(24);
@@ -59,11 +60,18 @@ export class AuthService {
 
     await this.mailService.sendVerificationEmail(user.email, token);
     await this.auditService.log(AuditAction.REGISTER, user.id, true, { email });
-    return { message: 'Registration successful. Please verify your email.' };
+
+    const tokens = await this.tokenService.issueTokenPair(user.id, user.email, user.role);
+    return {
+      userId: user.id,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      message: 'Registration successful. Please verify your email.',
+    };
   }
 
   async login(email: string, password: string, mfaToken?: string, ipAddress?: string, userAgent?: string) {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.usersService.findByEmailWithPassword(email);
     if (!user || !(await bcryptLib.compare(password, user.passwordHash))) {
       await this.auditService.log(AuditAction.LOGIN_FAILURE, null, false, { email }, ipAddress, userAgent);
       throw new UnauthorizedException('Invalid credentials');
@@ -72,6 +80,11 @@ export class AuthService {
     if (user.isBanned) {
       await this.auditService.log(AuditAction.LOGIN_FAILURE, user.id, false, { reason: 'banned' }, ipAddress, userAgent);
       throw new UnauthorizedException('Account is banned');
+    }
+
+    if (user.status && user.status !== 'active') {
+      await this.auditService.log(AuditAction.LOGIN_FAILURE, user.id, false, { reason: user.status }, ipAddress, userAgent);
+      throw new UnauthorizedException(`Account is ${user.status}`);
     }
 
     if (!user.isVerified) {
@@ -93,9 +106,21 @@ export class AuthService {
       }
     }
 
-    const result = await this.tokenService.issueTokenPair(user.id, user.email, user.role);
+    const tokens = await this.tokenService.issueTokenPair(user.id, user.email, user.role);
     await this.auditService.log(AuditAction.LOGIN_SUCCESS, user.id, true, {}, ipAddress, userAgent);
-    return result;
+    return {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+        avatar: user.avatar ?? null,
+        username: user.username ?? null,
+        createdAt: user.createdAt,
+      },
+    };
   }
 
   async refresh(rawRefreshToken: string) {

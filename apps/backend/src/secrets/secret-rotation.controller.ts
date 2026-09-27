@@ -6,7 +6,7 @@ import { Roles } from '../auth/roles.decorator';
 import { SecretRotationService } from './secret-rotation.service';
 
 @ApiTags('secret-rotation')
-@ApiBearerAuth('JWT-auth')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('secrets')
 export class SecretRotationController {

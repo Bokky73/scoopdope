@@ -5,24 +5,35 @@ import {
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull } from 'typeorm';
+import { Repository, Not, IsNull, In, MoreThanOrEqual } from 'typeorm';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Certificate } from './certificate.entity';
 import { Enrollment } from '../enrollments/enrollment.entity';
+import { Progress } from '../progress/progress.entity';
+import { CourseModule } from '../courses/course-module.entity';
+import { Lesson } from '../courses/lesson.entity';
 import { StellarService } from '../stellar/stellar.service';
 import * as crypto from 'crypto';
 
 /** Shape returned by GET /v1/certificates/:id/verify */
 export interface CertificateVerificationResult {
   verified: boolean;
+  revoked: boolean;
+  status: 'valid' | 'invalid' | 'revoked';
   certificateId: string;
   studentId: string;
+  studentName: string;
   courseId: string;
+  courseName: string;
   certificateHash: string;
   issuedAt: string;
   transactionHash: string | null;
+  stellarTransactionUrl: string | null;
   onChain: {
     found: boolean;
     successful: boolean | null;
@@ -40,6 +51,7 @@ export class CertificatesService {
     @InjectRepository(Enrollment)
     private enrollmentsRepository: Repository<Enrollment>,
     private stellarService: StellarService,
+    private readonly configService: ConfigService = new ConfigService(),
   ) {}
 
   // ── Event-driven trigger ──────────────────────────────────────────────────
@@ -90,13 +102,26 @@ export class CertificatesService {
   async issueCertificate(userId: string, courseId: string): Promise<Certificate> {
     // 1. Verify the enrollment exists and the course has been completed
     const enrollment = await this.enrollmentsRepository.findOne({
-      where: { userId, courseId, completedAt: Not(IsNull()) },
+      where: { userId, courseId },
       relations: ['user', 'course'],
     });
 
     if (!enrollment) {
       throw new BadRequestException(
         'Enrollment not found or course not yet completed',
+      );
+    }
+
+    const hasCompletedAllLessons = await this.hasCompletedAllCourseLessons(userId, courseId);
+    if (!enrollment.completedAt && !hasCompletedAllLessons) {
+      throw new BadRequestException(
+        'Course is not fully completed; all lessons must be marked complete before issuing a certificate',
+      );
+    }
+
+    if (!hasCompletedAllLessons) {
+      throw new BadRequestException(
+        'Course is not fully completed; all lessons must be marked complete before issuing a certificate',
       );
     }
 
@@ -171,7 +196,7 @@ export class CertificatesService {
       });
     }
 
-    return certificate;
+    return this.toCertificateResponse(certificate);
   }
 
   // ── Verification endpoint logic ───────────────────────────────────────────
@@ -186,14 +211,13 @@ export class CertificatesService {
    *  3. Return a structured payload combining the DB record and network result
    */
   async verifyById(id: string): Promise<CertificateVerificationResult> {
-    const cert = await this.certificatesRepository.findOne({
-      where: { id },
-      relations: ['user', 'course'],
-    });
+    const cert = await this.findCertificateByIdentifier(id);
 
     if (!cert) {
       throw new NotFoundException('Certificate not found');
     }
+
+    const revoked = Boolean(cert.revokedAt);
 
     let onChain: CertificateVerificationResult['onChain'] = {
       found: false,
@@ -204,12 +228,10 @@ export class CertificatesService {
     if (cert.stellarTransactionId) {
       try {
         const txRecords = await this.stellarService.getTransactions(
-          // getTransactions fetches by account; use a dedicated lookup instead
           cert.userId,
           200,
         );
 
-        // Search the fetched transactions for a matching hash
         const match = (txRecords as Array<{ hash: string; successful: boolean; createdAt: string }>)
           .find((tx) => tx.hash === cert.stellarTransactionId);
 
@@ -223,21 +245,33 @@ export class CertificatesService {
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         this.logger.warn(`Horizon lookup failed during verification: ${errorMessage}`);
-        // Not fatal — we still return the DB record; onChain.found remains false
       }
     }
 
-    const dbVerified =
-      cert.status === 'minted' || cert.status === 'verified';
+    const dbVerified = cert.status === 'minted' || cert.status === 'verified';
+    const blockchainVerified = !cert.stellarTransactionId || (onChain.found ? onChain.successful === true : true);
+    const verified = !revoked && dbVerified && blockchainVerified;
+    const status: CertificateVerificationResult['status'] = revoked
+      ? 'revoked'
+      : verified
+        ? 'valid'
+        : 'invalid';
 
     return {
-      verified: dbVerified && (onChain.found ? onChain.successful === true : true),
+      verified,
+      revoked,
+      status,
       certificateId: cert.id,
       studentId: cert.userId,
+      studentName: cert.user?.username || cert.user?.email || cert.userId,
       courseId: cert.courseId,
+      courseName: cert.course?.title || cert.courseId,
       certificateHash: cert.certificateHash,
       issuedAt: cert.issuedAt.toISOString(),
       transactionHash: cert.stellarTransactionId ?? null,
+      stellarTransactionUrl: cert.stellarTransactionId
+        ? this.buildStellarTransactionUrl(cert.stellarTransactionId)
+        : null,
       onChain,
     };
   }
@@ -297,6 +331,29 @@ export class CertificatesService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  private async findCertificateByIdentifier(identifier: string): Promise<Certificate | null> {
+    const record = await this.certificatesRepository.findOne({
+      where: [{ id: identifier }, { stellarTransactionId: identifier }, { certificateHash: identifier }],
+      relations: ['user', 'course'],
+    });
+
+    if (record) {
+      return record;
+    }
+
+    return null;
+  }
+
+  private buildStellarTransactionUrl(transactionHash: string): string {
+    const network = this.configService?.get<string>('stellar.network') || 'testnet';
+    const baseUrl =
+      network === 'mainnet'
+        ? 'https://horizon.stellar.org/transactions'
+        : 'https://horizon-testnet.stellar.org/transactions';
+
+    return `${baseUrl}/${transactionHash}`;
+  }
+
   /**
    * Deterministic hash: same userId + courseId always produce the same value.
    * This is intentional — if two concurrent requests race through the
@@ -308,5 +365,56 @@ export class CertificatesService {
       .createHash('sha256')
       .update(`${userId}:${courseId}`)
       .digest('hex');
+  }
+
+  private async hasCompletedAllCourseLessons(userId: string, courseId: string): Promise<boolean> {
+    const modules = await this.courseModuleRepository.find({
+      where: { courseId },
+      select: ['id'],
+    });
+
+    if (modules.length === 0) {
+      return false;
+    }
+
+    const moduleIds = modules.map((module) => module.id);
+    const lessons = await this.lessonRepository.find({
+      where: { moduleId: In(moduleIds) },
+      select: ['id'],
+    });
+
+    if (lessons.length === 0) {
+      return false;
+    }
+
+    const completedLessons = await this.progressRepository.find({
+      where: {
+        userId,
+        courseId,
+        lessonId: In(lessons.map((lesson) => lesson.id)),
+        progressPct: MoreThanOrEqual(100),
+      },
+      select: ['lessonId'],
+    });
+
+    const completedLessonIds = new Set(
+      completedLessons
+        .map((progressRow) => progressRow.lessonId)
+        .filter((lessonId): lessonId is string => Boolean(lessonId)),
+    );
+
+    return lessons.every((lesson) => completedLessonIds.has(lesson.id));
+  }
+
+  private toCertificateResponse(certificate: Certificate): Certificate & {
+    txHash: string | null;
+    stellarExplorerUrl: string | null;
+  } {
+    const txHash = certificate.stellarTransactionId ?? null;
+    return {
+      ...certificate,
+      txHash,
+      stellarExplorerUrl: txHash ? this.stellarService.getTransactionExplorerUrl(txHash) : null,
+    };
   }
 }

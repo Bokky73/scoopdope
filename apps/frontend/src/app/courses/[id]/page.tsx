@@ -41,6 +41,8 @@ interface CourseModule {
   releaseDate?: string;
   lessons?: Lesson[];
 }
+
+interface Prerequisite {
   courseId: string;
   title: string;
   completed: boolean;
@@ -72,20 +74,6 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
 
   const courseId = params.id;
   const isInstructor = user?.role === 'instructor' || user?.role === 'admin';
-
-  const handleEnroll = async () => {
-    setEnrolling(true);
-    try {
-      await api.post('/v1/enrollments', { courseId });
-      clearCompare();
-      toast.success('Enrolled successfully!');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Enrollment failed';
-      toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? msg);
-    } finally {
-      setEnrolling(false);
-    }
-  };
 
   useEffect(() => {
     async function fetchCourse() {

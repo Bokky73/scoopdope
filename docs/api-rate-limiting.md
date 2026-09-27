@@ -20,7 +20,8 @@ Example thresholds:
 | Authentication | `POST /auth/login`, `POST /auth/register` | 5 requests / minute |
 | Account recovery | `POST /auth/forgot-password` | 3 requests / hour |
 | High-risk operations | `POST /stellar/mint`, `POST /courses/*/submit` | 3-10 requests / minute |
-| Default API traffic | `GET /courses`, `GET /users/{id}` | 100 requests / minute |
+| Authenticated API traffic | `GET /courses`, `GET /users/{id}` with a valid session | 100 requests / minute per user ID |
+| Unauthenticated API traffic | Public endpoints without a valid session | 20 requests / minute per IP address |
 | Trusted service clients | internal API keys / allowlisted IPs | 1,000+ requests / minute or custom policy |
 
 These values should be treated as a starting point and tuned based on actual traffic patterns and service capacity.
@@ -58,7 +59,7 @@ Example response headers:
 
 ```
 HTTP/1.1 429 Too Many Requests
-X-RateLimit-Limit: 100
+X-RateLimit-Limit: 20 (unauthenticated) or 100 (authenticated)
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 23
 Retry-After: 23

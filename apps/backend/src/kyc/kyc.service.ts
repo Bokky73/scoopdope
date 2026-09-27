@@ -71,7 +71,8 @@ export class KycService {
           );
         }
       } catch (err) {
-        this.logger.error(`KYC provider request failed: ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`KYC provider request failed: ${message}`);
       }
     }
 
@@ -129,7 +130,8 @@ export class KycService {
           this.logger.warn(`KYC provider returned ${res.status} for ${stellarPublicKey}`);
         }
       } catch (err) {
-        this.logger.error(`KYC provider request failed: ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`KYC provider request failed: ${message}`);
       }
     }
 

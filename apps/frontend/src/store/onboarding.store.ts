@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type OnboardingStep = 'wallet' | 'courses' | 'complete';
+export type OnboardingStep = 'wallet' | 'courses' | 'features' | 'complete';
 
 interface OnboardingState {
   completed: boolean;
@@ -9,12 +9,14 @@ interface OnboardingState {
   currentStep: OnboardingStep;
   walletConnected: boolean;
   selectedCourseId: string | null;
+  lastUserId: string | null;
   setStep: (step: OnboardingStep) => void;
   setWalletConnected: (v: boolean) => void;
   setSelectedCourse: (id: string | null) => void;
-  complete: () => void;
-  skip: () => void;
+  complete: (userId?: string) => void;
+  skip: (userId?: string) => void;
   reset: () => void;
+  restartOnboarding: () => void;
 }
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -25,12 +27,13 @@ export const useOnboardingStore = create<OnboardingState>()(
       currentStep: 'wallet',
       walletConnected: false,
       selectedCourseId: null,
+      lastUserId: null,
       setStep: (currentStep) => set({ currentStep }),
       setWalletConnected: (walletConnected) => set({ walletConnected }),
       setSelectedCourse: (selectedCourseId) => set({ selectedCourseId }),
-      complete: () => {
-        set({ completed: true, currentStep: 'complete' });
-        // Clear persisted state after completion
+      complete: (userId?: string) => {
+        set({ completed: true, currentStep: 'complete', lastUserId: userId ?? null });
+        // Clear transient state after completion
         setTimeout(() => {
           set({
             currentStep: 'wallet',
@@ -39,7 +42,8 @@ export const useOnboardingStore = create<OnboardingState>()(
           });
         }, 100);
       },
-      skip: () => set({ skipped: true, completed: true }),
+      skip: (userId?: string) =>
+        set({ skipped: true, completed: true, lastUserId: userId ?? null }),
       reset: () =>
         set({
           completed: false,
@@ -47,6 +51,15 @@ export const useOnboardingStore = create<OnboardingState>()(
           currentStep: 'wallet',
           walletConnected: false,
           selectedCourseId: null,
+        }),
+      restartOnboarding: () =>
+        set({
+          completed: false,
+          skipped: false,
+          currentStep: 'wallet',
+          walletConnected: false,
+          selectedCourseId: null,
+          lastUserId: null,
         }),
     }),
     {
@@ -57,6 +70,7 @@ export const useOnboardingStore = create<OnboardingState>()(
         currentStep: s.currentStep,
         walletConnected: s.walletConnected,
         selectedCourseId: s.selectedCourseId,
+        lastUserId: s.lastUserId,
       }),
     }
   )

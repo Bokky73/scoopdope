@@ -1,6 +1,7 @@
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RolesGuard } from './roles.guard';
+import { RolesGuard } from '../roles.guard';
+import { ROLES_KEY } from '../roles.decorator';
 
 describe('RolesGuard', () => {
   let guard: RolesGuard;
@@ -11,15 +12,20 @@ describe('RolesGuard', () => {
     guard = new RolesGuard(reflector);
   });
 
-  const createMockContext = (user: any, handler: any, classRef: any) => {
-    return {
-      switchToHttp: () => ({
-        getRequest: () => ({ user }),
-      }),
-      getHandler: () => handler,
-      getClass: () => classRef,
-    } as ExecutionContext;
-  };
+  it('should be defined', () => {
+    expect(guard).toBeDefined();
+  });
+
+  it('should allow access if no roles are required', () => {
+    const mockContext = {
+      getHandler: () => ({}),
+      getClass: () => class {},
+      switchToHttp: () => ({ getRequest: () => ({ user: { role: 'student' } }) }),
+    } as unknown as ExecutionContext;
+
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(null);
+    expect(guard.canActivate(mockContext)).toBe(true);
+  });
 
   describe('No role restriction', () => {
     /**

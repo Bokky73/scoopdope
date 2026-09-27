@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "generated_at": "2026-09-02",
+  "contracts": [
+    {
+      "name": "analytics",
+      "file": "analytics.json",
+      "description": "On-chain progress tracking per student/course"
+    },
+    {
+      "name": "certificate",
+      "file": "certificate.json",
+      "description": "Certificate NFT minting and revocation"
+    },
+    {
+      "name": "token",
+      "file": "token.json",
+      "description": "BST reward token (SEP-0041 fungible token)"
+    },
+    {
+      "name": "shared",
+      "file": "shared.json",
+      "description": "RBAC, pausability, cross-contract utilities"
+    }
+  ]
+}

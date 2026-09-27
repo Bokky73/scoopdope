@@ -28,6 +28,22 @@ class VoteDto {
 export class ForumsController {
   constructor(private readonly forumsService: ForumsService) {}
 
+  @Get('forums/threads')
+  @ApiOperation({ summary: 'List all forum threads with pagination' })
+  @ApiResponse({ status: 200, description: 'Returns paginated forum threads' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  listThreads(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('courseId') courseId?: string,
+  ) {
+    const parsedPage = page ? parseInt(page, 10) : 1;
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.forumsService.findThreads(parsedPage, parsedLimit, courseId);
+  }
+
   @Get('courses/:id/posts')
   @ApiOperation({ summary: 'Get forum posts for a course' })
   @ApiResponse({ status: 400, description: 'Bad request' })
@@ -39,6 +55,21 @@ export class ForumsController {
   @ApiResponse({ status: 200, description: 'Returns course forum posts' })
   findByCourse(@Param('id') courseId: string) {
     return this.forumsService.findPostsByCourse(courseId);
+  }
+
+  @Get('forums/threads')
+  @ApiOperation({ summary: 'List all forum threads across courses with pagination' })
+  @ApiResponse({ status: 200, description: 'Returns paginated list of forum threads' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  findThreads(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('courseId') courseId?: string,
+  ) {
+    const parsedPage = page ? parseInt(page, 10) : 1;
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.forumsService.findThreads(parsedPage, parsedLimit, courseId);
   }
 
   @Get('forums/threads/:id')

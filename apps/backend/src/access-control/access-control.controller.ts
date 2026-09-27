@@ -4,8 +4,10 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AccessControlService } from './access-control.service';
 import { AccessRole } from './course-access-control.entity';
-import { ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('access-control')
+@ApiBearerAuth()
 @Controller('v1/access-control')
 @UseGuards(JwtAuthGuard)
 export class AccessControlController {
@@ -14,6 +16,7 @@ export class AccessControlController {
   @Post('grant')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'Grant course access to a user' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -33,6 +36,7 @@ export class AccessControlController {
   @Post('grant/timed')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'Grant time-limited course access to a user' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -49,6 +53,7 @@ export class AccessControlController {
   }
 
   @Post('verify-content')
+  @ApiOperation({ summary: 'Verify whether a user can access content' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -67,6 +72,7 @@ export class AccessControlController {
   }
 
   @Post('check')
+  @ApiOperation({ summary: 'Check course access for a user' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -85,6 +91,7 @@ export class AccessControlController {
   @Delete(':courseId/users/:userId')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'Revoke a user\'s course access' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -101,6 +108,7 @@ export class AccessControlController {
   @Post(':courseId/users/:userId/subscription')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'Update a user\'s course subscription access' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -122,6 +130,7 @@ export class AccessControlController {
   @Get(':courseId/logs')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'Get access logs for a course' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -140,6 +149,7 @@ export class AccessControlController {
   }
 
   @Get(':courseId/users/:userId')
+  @ApiOperation({ summary: 'Get a user\'s course access details' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -156,6 +166,7 @@ export class AccessControlController {
   @Get(':courseId/users')
   @UseGuards(RolesGuard)
   @Roles('admin')
+  @ApiOperation({ summary: 'List users with access to a course' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

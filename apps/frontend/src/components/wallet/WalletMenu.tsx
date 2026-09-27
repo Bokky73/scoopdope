@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
 import { useWalletStore } from '@/store/walletStore';
-import { connectFreighter, fetchXlmBalance } from '@/lib/walletApi';
+import { connectFreighter, fetchXlmBalance, fetchBstBalance } from '@/lib/walletApi';
 import { TestnetFaucet } from './TestnetFaucet';
 import { Modal } from '@/components/ui/Modal';
+import { RefreshCw } from 'lucide-react';
 
 interface WalletMenuProps {
   onClose: () => void;
@@ -26,11 +28,23 @@ const EXPLORER_BASE =
     : 'https://stellar.expert/explorer/testnet/tx';
 
 export function WalletMenu({ onClose }: WalletMenuProps) {
-  const { address, balance, balanceError, disconnect, setAddress, setBalance, setBalanceError, setIsConnecting, setError } = useWalletStore();
+  const { address, balance, bstBalance, bstBalanceRefreshKey, balanceError, disconnect, setAddress, setBalance, setBstBalance, setBalanceError, setIsConnecting, setError } = useWalletStore();
   const menuRef = useRef<HTMLDivElement>(null);
   const [txHistory, setTxHistory] = useState<TxRecord[]>([]);
   const [txLoading, setTxLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Fetch BST balance using SWR
+  const { data: bstBalanceData, error: bstError, isLoading: bstLoading, mutate: mutateBst } = useSWR<string>(
+    address ? ['bst-balance', address, bstBalanceRefreshKey] : null,
+    ([, key]: [string, string, number]) => fetchBstBalance(key),
+    {
+      refreshInterval: 60_000,
+      keepPreviousData: true,
+      shouldRetryOnError: false,
+      onSuccess: (data) => setBstBalance(data),
+    }
+  );
 
   // Close on outside click
   useEffect(() => {
@@ -113,6 +127,22 @@ export function WalletMenu({ onClose }: WalletMenuProps) {
           </p>
         ) : (
           <p className="text-sm font-medium">{balance ?? '—'} XLM</p>
+        )}
+      </div>
+      <div>
+        <p className="text-xs text-gray-500 mb-0.5">BST Balance</p>
+        {bstError && bstBalanceData === undefined ? (
+          <p className="text-sm text-gray-500">
+            Balance unavailable{' '}
+            <button className="text-blue-600 underline text-xs flex items-center gap-1" onClick={() => mutateBst()}>
+              <RefreshCw className="w-3 h-3" /> Retry
+            </button>
+          </p>
+        ) : (
+          <p className="text-sm font-medium flex items-center gap-2">
+            {bstBalanceData ?? '0'} BST
+            {bstLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+          </p>
         )}
       </div>
       {address && <TestnetFaucet publicKey={address} />}

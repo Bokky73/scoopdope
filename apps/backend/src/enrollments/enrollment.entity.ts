@@ -10,6 +10,12 @@ import {
 import { User } from '../users/user.entity';
 import { Course } from '../courses/course.entity';
 
+export enum EnrollmentStatus {
+  ACTIVE = 'active',
+  COMPLETED = 'completed',
+  DROPPED = 'dropped',
+}
+
 @Entity('enrollments')
 @Unique(['userId', 'courseId'])
 export class Enrollment {
@@ -48,4 +54,8 @@ export class Enrollment {
    */
   @Column({ nullable: true, type: 'varchar', length: 64 })
   transactionHash: string | null;
+
+  /** Enrollment status: ACTIVE, COMPLETED, or DROPPED */
+  @Column({ type: 'enum', enum: EnrollmentStatus, default: EnrollmentStatus.ACTIVE })
+  status: EnrollmentStatus;
 }

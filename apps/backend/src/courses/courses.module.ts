@@ -3,11 +3,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Course } from './course.entity';
 import { CourseModule } from './course-module.entity';
 import { Lesson } from './lesson.entity';
+import { Category } from './category.entity';
 import { CoursesService } from './courses.service';
 import { ModulesService } from './modules.service';
 import { LessonsService } from './lessons.service';
+import { CategoriesService } from './categories.service';
 import { CoursesController } from './courses.controller';
+import { AdminCoursesController } from './admin-courses.controller';
 import { ModulesController } from './modules.controller';
+import { CategoriesController } from './categories.controller';
 import { Review } from './review.entity';
 import { Enrollment } from '../enrollments/enrollment.entity';
 import { ReviewsService } from './reviews.service';
@@ -25,18 +29,48 @@ import { TranscribeService } from './transcribe.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { User } from '../users/user.entity';
-import { ProgressModule } from '../progress/progress.module';
+import { CourseInstructor } from './course-instructor.entity';
+import { InstructorAssignmentService } from './instructor-assignment.service';
+import { InstructorAssignmentController } from './instructor-assignment.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Course, CourseModule, Lesson, Review, Enrollment, CourseVersion, CoursePrerequisite, User]),
+    TypeOrmModule.forFeature([
+      Course,
+      CourseModule,
+      Lesson,
+      Review,
+      Enrollment,
+      CourseVersion,
+      CoursePrerequisite,
+      User,
+      CourseInstructor,
+    ]),
     SearchModule,
     NotificationsModule,
     MetricsModule,
-    ProgressModule,
+    AnnouncementsModule,
   ],
-  providers: [CoursesService, ModulesService, LessonsService, ReviewsService, CourseVersioningService, PrerequisitesService, CourseSchedulerService, DripSchedulerService, TranscribeService],
-  controllers: [CoursesController, ModulesController, ReviewsController, CourseVersioningController, PrerequisitesController],
+  providers: [
+    CoursesService,
+    ModulesService,
+    LessonsService,
+    ReviewsService,
+    CourseVersioningService,
+    PrerequisitesService,
+    CourseSchedulerService,
+    DripSchedulerService,
+    TranscribeService,
+    InstructorAssignmentService,
+  ],
+  controllers: [
+    CoursesController,
+    ModulesController,
+    ReviewsController,
+    CourseVersioningController,
+    PrerequisitesController,
+    InstructorAssignmentController,
+  ],
   exports: [CoursesService, PrerequisitesService],
 })
 export class CoursesModule {}

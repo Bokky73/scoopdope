@@ -12,11 +12,11 @@ export class ValidateAndSanitizePipe implements PipeTransform {
     const sanitized = await this.sanitizationPipe.transform(value);
 
     // Then validate if DTO class is provided
-    if (!metadata.type || metadata.type === 'custom') {
+    if (!metadata.type || metadata.type === 'custom' || !metadata.metatype) {
       return sanitized;
     }
 
-    const object = plainToInstance(metadata.metatype, sanitized);
+    const object = plainToInstance(metadata.metatype as any, sanitized);
     const errors = await validate(object, {
       skipMissingProperties: false,
       whitelist: true,

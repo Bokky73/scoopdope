@@ -14,10 +14,10 @@ export class TranscribeService {
 
   constructor(private configService: ConfigService) {
     this.transcribeClient = new TranscribeClient({
-      region: this.configService.get('aws.region'),
+      region: this.configService.get<string>('aws.region') ?? 'us-east-1',
       credentials: {
-        accessKeyId: this.configService.get('aws.accessKeyId'),
-        secretAccessKey: this.configService.get('aws.secretAccessKey'),
+        accessKeyId: this.configService.get<string>('aws.accessKeyId') ?? '',
+        secretAccessKey: this.configService.get<string>('aws.secretAccessKey') ?? '',
       },
     });
   }
@@ -37,7 +37,8 @@ export class TranscribeService {
       await this.transcribeClient.send(command);
       return jobName;
     } catch (error) {
-      this.logger.error(`Failed to start transcription for lesson ${lessonId}: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to start transcription for lesson ${lessonId}: ${message}`);
       throw error;
     }
   }
@@ -64,7 +65,8 @@ export class TranscribeService {
 
       return status;
     } catch (error) {
-      this.logger.error(`Failed to get transcription result for ${jobName}: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get transcription result for ${jobName}: ${message}`);
       throw error;
     }
   }

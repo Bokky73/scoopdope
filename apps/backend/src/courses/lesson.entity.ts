@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   OneToMany,
   JoinColumn,
@@ -47,9 +48,15 @@ export class Lesson {
   @Column({ default: 0 })
   durationMinutes: number;
 
+  @Column({ type: 'jsonb', nullable: true })
+  learningObjectives?: string[];
+
   @OneToMany(() => Assignment, (assignment) => assignment.lesson)
   assignments: Assignment[];
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

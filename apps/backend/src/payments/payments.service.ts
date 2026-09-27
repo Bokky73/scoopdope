@@ -7,7 +7,7 @@ import { Course } from '../courses/course.entity';
 import { CurrencyConversionService, SupportedCurrency } from './currency-conversion.service';
 import { CouponsService } from '../coupons/coupons.service';
 
-interface OrderPreview {
+export interface OrderPreview {
   courseId: string;
   courseTitle: string;
   originalPriceUsd: number;
@@ -229,8 +229,9 @@ export class PaymentsService {
     try {
       event = this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
     } catch (err) {
-      this.logger.error(`Webhook signature verification failed: ${err.message}`);
-      throw new BadRequestException(`Webhook Error: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Webhook signature verification failed: ${message}`);
+      throw new BadRequestException(`Webhook Error: ${message}`);
     }
 
     if (event.type === 'payment_intent.succeeded') {

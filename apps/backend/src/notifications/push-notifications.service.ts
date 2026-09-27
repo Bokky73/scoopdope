@@ -62,12 +62,13 @@ export class PushNotificationsService {
           JSON.stringify(payload)
         );
       } catch (error) {
-        if (error.statusCode === 410 || error.statusCode === 404) {
+        const statusCode = error instanceof Error && 'statusCode' in error ? Number((error as any).statusCode) : undefined;
+        if (statusCode === 410 || statusCode === 404) {
           // Subscription has expired or is no longer valid
           this.logger.log(`Removing invalid subscription for user ${userId}: ${sub.endpoint}`);
           await this.pushSubscriptionRepo.remove(sub);
         } else {
-          this.logger.error(`Error sending push notification to user ${userId}:`, error);
+          this.logger.error(`Error sending push notification to user ${userId}:`, error instanceof Error ? error : String(error));
         }
       }
     });

@@ -1,10 +1,11 @@
 import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { QuizzesService } from './quizzes.service';
 
 @ApiTags('quizzes')
+@ApiBearerAuth()
 @Controller('v1/quizzes')
 @UseGuards(JwtAuthGuard)
 export class QuizzesController {

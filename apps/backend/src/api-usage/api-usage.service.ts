@@ -87,4 +87,154 @@ export class ApiUsageService {
       .andWhere('log.createdAt > :since', { since })
       .getCount();
   }
+
+  async getStatistics(days: number) {
+    const now = new Date();
+    const from = new Date(now.getTime() - days * 86_400_000);
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(now.getTime() - 7 * 86_400_000);
+    const monthStart = new Date(now.getTime() - 30 * 86_400_000);
+
+    // Run all queries in parallel
+    const [totalsRaw, percentilesRaw, dauRaw, wauRaw, mauRaw, topEndpoints, dailyTrend] =
+      await Promise.all([
+        // Overall totals for the period
+        this.logRepo
+          .createQueryBuilder('log')
+          .select('COUNT(*)', 'totalRequests')
+          .addSelect('AVG(log.responseTimeMs)', 'avgResponseTimeMs')
+          .addSelect(
+            'SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)',
+            'totalErrors',
+          )
+          .where('log.createdAt BETWEEN :from AND :to', { from, to: now })
+          .getRawOne<{
+            totalRequests: string;
+            avgResponseTimeMs: string;
+            totalErrors: string;
+          }>(),
+
+        // Percentiles using PostgreSQL percentile_cont
+        this.logRepo
+          .createQueryBuilder('log')
+          .select(
+            'percentile_cont(0.50) WITHIN GROUP (ORDER BY log.responseTimeMs)',
+            'p50',
+          )
+          .addSelect(
+            'percentile_cont(0.95) WITHIN GROUP (ORDER BY log.responseTimeMs)',
+            'p95',
+          )
+          .addSelect(
+            'percentile_cont(0.99) WITHIN GROUP (ORDER BY log.responseTimeMs)',
+            'p99',
+          )
+          .where('log.createdAt BETWEEN :from AND :to', { from, to: now })
+          .getRawOne<{ p50: string; p95: string; p99: string }>(),
+
+        // Daily active users (today)
+        this.logRepo
+          .createQueryBuilder('log')
+          .select('COUNT(DISTINCT log.userId)', 'count')
+          .where('log.createdAt >= :since', { since: todayStart })
+          .andWhere('log.userId IS NOT NULL')
+          .getRawOne<{ count: string }>(),
+
+        // Weekly active users (last 7 days)
+        this.logRepo
+          .createQueryBuilder('log')
+          .select('COUNT(DISTINCT log.userId)', 'count')
+          .where('log.createdAt >= :since', { since: weekStart })
+          .andWhere('log.userId IS NOT NULL')
+          .getRawOne<{ count: string }>(),
+
+        // Monthly active users (last 30 days)
+        this.logRepo
+          .createQueryBuilder('log')
+          .select('COUNT(DISTINCT log.userId)', 'count')
+          .where('log.createdAt >= :since', { since: monthStart })
+          .andWhere('log.userId IS NOT NULL')
+          .getRawOne<{ count: string }>(),
+
+        // Top endpoints by request count
+        this.logRepo
+          .createQueryBuilder('log')
+          .select('log.endpoint', 'endpoint')
+          .addSelect('log.method', 'method')
+          .addSelect('COUNT(*)', 'requestCount')
+          .addSelect('AVG(log.responseTimeMs)', 'avgResponseTimeMs')
+          .addSelect(
+            'SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)',
+            'errorCount',
+          )
+          .where('log.createdAt BETWEEN :from AND :to', { from, to: now })
+          .groupBy('log.endpoint')
+          .addGroupBy('log.method')
+          .orderBy('"requestCount"', 'DESC')
+          .limit(10)
+          .getRawMany<{
+            endpoint: string;
+            method: string;
+            requestCount: string;
+            avgResponseTimeMs: string;
+            errorCount: string;
+          }>(),
+
+        // Daily trend grouped by day
+        this.logRepo
+          .createQueryBuilder('log')
+          .select("TO_CHAR(DATE_TRUNC('day', log.createdAt), 'YYYY-MM-DD')", 'date')
+          .addSelect('COUNT(*)', 'requestCount')
+          .addSelect(
+            'SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)',
+            'errorCount',
+          )
+          .addSelect('AVG(log.responseTimeMs)', 'avgResponseTimeMs')
+          .where('log.createdAt BETWEEN :from AND :to', { from, to: now })
+          .groupBy("DATE_TRUNC('day', log.createdAt)")
+          .orderBy("DATE_TRUNC('day', log.createdAt)", 'ASC')
+          .getRawMany<{
+            date: string;
+            requestCount: string;
+            errorCount: string;
+            avgResponseTimeMs: string;
+          }>(),
+      ]);
+
+    const totalRequests = parseInt(totalsRaw?.totalRequests ?? '0', 10);
+    const totalErrors = parseInt(totalsRaw?.totalErrors ?? '0', 10);
+
+    return {
+      period: { from, to: now, days },
+      totalRequests,
+      errorRate:
+        totalRequests > 0
+          ? Math.round((totalErrors / totalRequests) * 10000) / 100
+          : 0,
+      avgResponseTimeMs: Math.round(
+        parseFloat(totalsRaw?.avgResponseTimeMs ?? '0'),
+      ),
+      p50ResponseTimeMs: Math.round(parseFloat(percentilesRaw?.p50 ?? '0')),
+      p95ResponseTimeMs: Math.round(parseFloat(percentilesRaw?.p95 ?? '0')),
+      p99ResponseTimeMs: Math.round(parseFloat(percentilesRaw?.p99 ?? '0')),
+      dailyActiveUsers: parseInt(dauRaw?.count ?? '0', 10),
+      weeklyActiveUsers: parseInt(wauRaw?.count ?? '0', 10),
+      monthlyActiveUsers: parseInt(mauRaw?.count ?? '0', 10),
+      topEndpoints: topEndpoints.map((e) => ({
+        endpoint: e.endpoint,
+        method: e.method,
+        requestCount: parseInt(e.requestCount, 10),
+        avgResponseTimeMs: Math.round(parseFloat(e.avgResponseTimeMs ?? '0')),
+        errorCount: parseInt(e.errorCount, 10),
+      })),
+      dailyTrend: dailyTrend.map((d) => ({
+        date: d.date,
+        requestCount: parseInt(d.requestCount, 10),
+        errorCount: parseInt(d.errorCount, 10),
+        avgResponseTimeMs: Math.round(parseFloat(d.avgResponseTimeMs ?? '0')),
+      })),
+    };
+  }
 }

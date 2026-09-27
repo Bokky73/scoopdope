@@ -9,10 +9,13 @@ import { UsersModule } from '../users/users.module';
 import { StreaksModule } from '../streaks/streaks.module';
 import { BundlesModule } from '../bundles/bundles.module';
 import { MetricsModule } from '../metrics/metrics.module';
+import { Course } from '../courses/course.entity';
+import { CourseModule as CourseModuleEntity } from '../courses/course-module.entity';
+import { Enrollment } from '../enrollments/enrollment.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Progress]),
+    TypeOrmModule.forFeature([Progress, Course, CourseModuleEntity, Enrollment]),
     StellarModule,
     CredentialsModule,
     UsersModule,

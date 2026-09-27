@@ -186,6 +186,12 @@ export class StellarService implements OnApplicationShutdown {
     return { message: `Account ${publicKey} funded successfully` };
   }
 
+  getTransactionExplorerUrl(txHash: string): string {
+    const network = this.configService.get<string>('stellar.network') ?? 'testnet';
+    const segment = network === 'mainnet' ? 'public' : 'testnet';
+    return `https://stellar.expert/explorer/${segment}/tx/${txHash}`;
+  }
+
   async mintCertificateNFT(
     recipientPublicKey: string,
     certificateHash: string,

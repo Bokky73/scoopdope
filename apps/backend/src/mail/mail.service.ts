@@ -74,4 +74,19 @@ export class MailService {
              <a href="${frontendUrl}/courses">View Courses</a>`,
     });
   }
+
+  /** Generic helper for services that need to send a custom email. */
+  async sendEmail(to: string, subject: string, html: string): Promise<void> {
+    if (!this.configService.get<boolean>('mail.enabled')) {
+      this.logger.log(`[DEV] Email to ${to} — Subject: ${subject}`);
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: this.configService.get<string>('mail.from'),
+      to,
+      subject,
+      html,
+    });
+  }
 }

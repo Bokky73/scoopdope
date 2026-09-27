@@ -23,7 +23,7 @@ export class DistributedLockService implements OnModuleDestroy {
   async acquireLock(lockKey: string, ttlSeconds = 60): Promise<string | null> {
     const client = this.getClient();
     const lockValue = crypto.randomBytes(16).toString('hex');
-    const result = await client.set(lockKey, lockValue, 'NX', 'EX', ttlSeconds);
+    const result = await client.set(lockKey, lockValue, 'EX', ttlSeconds, 'NX');
     return result === 'OK' ? lockValue : null;
   }
 

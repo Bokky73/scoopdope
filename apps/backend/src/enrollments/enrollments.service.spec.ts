@@ -9,6 +9,8 @@ import { Enrollment } from './enrollment.entity';
 import { EnrollmentConfirmedEvent } from './enrollment-confirmed.event';
 import { PrerequisitesService } from '../courses/prerequisites.service';
 import { CourseVersioningService } from '../courses/course-versioning.service';
+import { CoursesService } from '../courses/courses.service';
+import { CourseStatus } from '../courses/course.entity';
 import { MetricsService } from '../metrics/metrics.service';
 import { StellarService } from '../stellar/stellar.service';
 
@@ -43,6 +45,7 @@ describe('EnrollmentsService — on-chain enrollment flow', () => {
   let stellarService: jest.Mocked<StellarService>;
   let prereqService: jest.Mocked<PrerequisitesService>;
   let versioningService: jest.Mocked<CourseVersioningService>;
+  let coursesService: jest.Mocked<CoursesService>;
   let metricsService: jest.Mocked<MetricsService>;
 
   beforeEach(async () => {
@@ -70,6 +73,10 @@ describe('EnrollmentsService — on-chain enrollment flow', () => {
       listVersions: jest.fn(),
     };
 
+    const mockCourses: Partial<jest.Mocked<CoursesService>> = {
+      findOne: jest.fn().mockResolvedValue({ id: COURSE_ID, status: CourseStatus.PUBLISHED } as any),
+    };
+
     const mockMetrics: Partial<jest.Mocked<MetricsService>> = {
       incrementEnrollment: jest.fn(),
     };
@@ -82,6 +89,7 @@ describe('EnrollmentsService — on-chain enrollment flow', () => {
         { provide: StellarService, useValue: mockStellar },
         { provide: PrerequisitesService, useValue: mockPrereq },
         { provide: CourseVersioningService, useValue: mockVersioning },
+        { provide: CoursesService, useValue: mockCourses },
         { provide: MetricsService, useValue: mockMetrics },
       ],
     }).compile();
@@ -92,6 +100,7 @@ describe('EnrollmentsService — on-chain enrollment flow', () => {
     stellarService = module.get(StellarService);
     prereqService = module.get(PrerequisitesService);
     versioningService = module.get(CourseVersioningService);
+    coursesService = module.get(CoursesService);
     metricsService = module.get(MetricsService);
   });
 

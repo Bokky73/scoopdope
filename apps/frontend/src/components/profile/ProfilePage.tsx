@@ -22,7 +22,7 @@ import { NotificationSettings } from '@/components/profile/NotificationSettings'
 import { GdprSection } from '@/components/profile/GdprSection';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useBookmarksStore } from '@/store/bookmarks.store';
-import { computeAchievements } from '@/app/profile/computeAchievements';
+import BadgeDisplay, { type BadgeProgress } from './BadgeDisplay';
 
 interface User {
   id: string;
@@ -59,7 +59,7 @@ export function ProfilePage() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [badges, setBadges] = useState<any[]>([]);
+  const [badges, setBadges] = useState<BadgeProgress[]>([]);
   const savedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const avatarObjectUrlRef = useRef<string | null>(null);
   const { bookmarks, fetchBookmarks } = useBookmarksStore();
@@ -99,23 +99,7 @@ export function ProfilePage() {
   useEffect(() => {
     if (!user) return;
 
-    const creds = api.get(`/credentials/${user.id}`).then((r) => r.data).catch(() => []);
-    const progress = api.get(`/users/${user.id}/progress`).then((r) => r.data).catch(() => []);
-    const bst = user.stellarPublicKey
-      ? api
-          .get(`/stellar/balance/${user.stellarPublicKey}`)
-          .then((r) => {
-            const b = r.data.balances?.find((b: any) => b.asset_code === 'BST');
-            return parseFloat(b?.balance ?? '0');
-          })
-          .catch(() => 0)
-      : Promise.resolve(0);
-
-    Promise.all([creds, progress, bst]).then(([credentials, progressRecords, bstBalance]) => {
-      const credentialCount = Array.isArray(credentials) ? credentials.length : 0;
-      const input = { credentialCount, bstBalance: Number(bstBalance), progressRecords };
-      setBadges(computeAchievements(input));
-    });
+    api.get('/v1/badges/me').then((response) => setBadges(response.data ?? [])).catch(() => setBadges([]));
   }, [user]);
 
   // Cleanup timeout and object URL on unmount
@@ -530,7 +514,7 @@ export function ProfilePage() {
         <KycVerification stellarPublicKey={user.stellarPublicKey} />
 
         {/* Achievements Section */}
-        {badges.length > 0 && <AchievementsSection badges={badges} />}
+        {badges.length > 0 && <BadgeDisplay badges={badges} />}
 
         {/* Notification Settings */}
         <NotificationSettings />
@@ -542,24 +526,5 @@ export function ProfilePage() {
   );
 }
 
-interface AchievementsSectionProps {
-  badges: any[];
-}
 
-function AchievementsSection({ badges }: AchievementsSectionProps) {
-  const t = useTranslations('profile');
 
-  return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('achievements', 'Achievements')}</h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {badges.map((badge, idx) => (
-          <div key={idx} className="flex flex-col items-center gap-2 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="text-2xl">{badge.icon || '🏆'}</div>
-            <span className="text-sm font-medium text-center text-gray-900 dark:text-gray-100">{badge.title}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}

@@ -69,6 +69,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Desc 1',
         level: 'beginner',
         isPublished: true,
+        status: CourseStatus.PUBLISHED,
       });
 
       await service.create({
@@ -76,6 +77,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Desc 2',
         level: 'intermediate',
         isPublished: false,
+        status: CourseStatus.DRAFT,
       });
 
       const result = await service.findAll();
@@ -91,6 +93,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Learn Stellar',
         level: 'beginner',
         isPublished: true,
+        status: CourseStatus.PUBLISHED,
       });
 
       await service.create({
@@ -98,6 +101,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Learn Solana',
         level: 'beginner',
         isPublished: true,
+        status: CourseStatus.PUBLISHED,
       });
 
       const result = await service.findAll({ search: 'Stellar' });
@@ -112,6 +116,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Desc',
         level: 'beginner',
         isPublished: true,
+        status: CourseStatus.PUBLISHED,
       });
 
       await service.create({
@@ -119,6 +124,7 @@ describe('CoursesService (Integration)', () => {
         description: 'Desc',
         level: 'advanced',
         isPublished: true,
+        status: CourseStatus.PUBLISHED,
       });
 
       const result = await service.findAll({ level: 'beginner' });

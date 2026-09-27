@@ -1,0 +1,136 @@
+{
+  "contract_name": "analytics",
+  "version": "1.0.0",
+  "network": "stellar/soroban",
+  "functions": [
+    {
+      "name": "initialize",
+      "doc": "Initialize the analytics contract with an admin address.",
+      "inputs": [
+        { "name": "admin", "type": "address" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "set_admin",
+      "doc": "Transfer admin rights to a new address. Requires current admin auth.",
+      "inputs": [
+        { "name": "new_admin", "type": "address" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "record_progress",
+      "doc": "Record a student's progress percentage (0-100) for a course.",
+      "inputs": [
+        { "name": "student", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "progress_pct", "type": "i32" }
+      ],
+      "outputs": [{ "type": "void" }]
+    },
+    {
+      "name": "get_progress",
+      "doc": "Retrieve the progress record for a student/course pair.",
+      "inputs": [
+        { "name": "student", "type": "address" },
+        { "name": "course_id", "type": "symbol" }
+      ],
+      "outputs": [{ "type": "ProgressRecord" }]
+    },
+    {
+      "name": "get_student_courses",
+      "doc": "Return the list of course IDs a student has progress in.",
+      "inputs": [
+        { "name": "student", "type": "address" }
+      ],
+      "outputs": [{ "type": "Vec<symbol>" }]
+    },
+    {
+      "name": "get_completion_stats",
+      "doc": "Return aggregate platform completion statistics.",
+      "inputs": [],
+      "outputs": [{ "type": "CompletionStats" }]
+    },
+    {
+      "name": "get_daily_stats",
+      "doc": "Return completion statistics for a given day (Unix timestamp, day-aligned).",
+      "inputs": [
+        { "name": "period", "type": "u64" }
+      ],
+      "outputs": [{ "type": "TimeBasedStats" }]
+    },
+    {
+      "name": "get_weekly_stats",
+      "doc": "Return completion statistics for a given ISO week.",
+      "inputs": [
+        { "name": "period", "type": "u64" }
+      ],
+      "outputs": [{ "type": "TimeBasedStats" }]
+    },
+    {
+      "name": "get_monthly_stats",
+      "doc": "Return completion statistics for a given month.",
+      "inputs": [
+        { "name": "period", "type": "u64" }
+      ],
+      "outputs": [{ "type": "TimeBasedStats" }]
+    },
+    {
+      "name": "get_top_performers",
+      "doc": "Return the leaderboard of top-performing students.",
+      "inputs": [],
+      "outputs": [{ "type": "Vec<TopPerformer>" }]
+    },
+    {
+      "name": "get_milestone",
+      "doc": "Retrieve a specific milestone record for a student/course/percentage.",
+      "inputs": [
+        { "name": "student", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "milestone_pct", "type": "u32" }
+      ],
+      "outputs": [{ "type": "MilestoneRecord" }]
+    }
+  ],
+  "types": {
+    "ProgressRecord": {
+      "fields": [
+        { "name": "student", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "progress_pct", "type": "u32" },
+        { "name": "completed", "type": "bool" },
+        { "name": "timestamp", "type": "u64" }
+      ]
+    },
+    "CompletionStats": {
+      "fields": [
+        { "name": "total_completions", "type": "u32" },
+        { "name": "avg_completion_rate", "type": "u32" }
+      ]
+    },
+    "TimeBasedStats": {
+      "fields": [
+        { "name": "period", "type": "u64" },
+        { "name": "completions", "type": "u32" },
+        { "name": "avg_progress", "type": "u32" }
+      ]
+    },
+    "TopPerformer": {
+      "fields": [
+        { "name": "student", "type": "address" },
+        { "name": "completion_count", "type": "u32" },
+        { "name": "avg_progress", "type": "u32" }
+      ]
+    },
+    "MilestoneRecord": {
+      "fields": [
+        { "name": "student", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "milestone_pct", "type": "u32" },
+        { "name": "achieved_at", "type": "u64" }
+      ]
+    }
+  },
+  "events": []
+}

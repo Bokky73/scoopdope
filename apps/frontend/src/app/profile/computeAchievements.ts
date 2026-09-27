@@ -1,37 +1,43 @@
 import type { AchievementInput, BadgeState } from './types';
 
-export default function computeAchievements(input: AchievementInput): BadgeState[] {
+/**
+ * Pure function that computes badge states from student data.
+ * No side effects, no mocking needed for tests.
+ *
+ * Always returns exactly 5 badges with distinct IDs.
+ */
+export function computeAchievements(input: AchievementInput): BadgeState[] {
   const { credentialCount, bstBalance, progressRecords } = input;
 
-  const firstStep = {
+  const firstStep: BadgeState = {
     id: 'first-step',
     name: 'First Step',
     description: 'Complete your first course',
     earned: credentialCount >= 1,
   };
 
-  const courseCollector = {
+  const courseCollector: BadgeState = {
     id: 'course-collector',
     name: 'Course Collector',
     description: 'Earn 5 course credentials',
     earned: credentialCount >= 5,
   };
 
-  const tokenEarner = {
+  const tokenEarner: BadgeState = {
     id: 'token-earner',
     name: 'Token Earner',
     description: 'Have a positive BST balance',
     earned: bstBalance > 0,
   };
 
-  const highAchiever = {
+  const highAchiever: BadgeState = {
     id: 'high-achiever',
     name: 'High Achiever',
     description: 'Accumulate at least 500 BST',
     earned: bstBalance >= 500,
   };
 
-  const dedicatedLearner = {
+  const dedicatedLearner: BadgeState = {
     id: 'dedicated-learner',
     name: 'Dedicated Learner',
     description: 'Have at least one in-progress course',
@@ -40,3 +46,5 @@ export default function computeAchievements(input: AchievementInput): BadgeState
 
   return [firstStep, courseCollector, tokenEarner, highAchiever, dedicatedLearner];
 }
+
+export default computeAchievements;

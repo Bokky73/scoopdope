@@ -4,7 +4,9 @@ import { UsersController, AdminUsersController } from './users.controller';
 describe('UsersController', () => {
   const mockService = {
     findById: jest.fn(),
+    getPublicProfile: jest.fn(),
     update: jest.fn(),
+    changeRole: jest.fn(),
   };
   const mockAuditService = {
     log: jest.fn(),
@@ -16,12 +18,20 @@ describe('UsersController', () => {
     controller = new UsersController(mockService as any, mockService as any, mockAuditService as any);
   });
 
-  it('findOne should return a user', async () => {
-    const user = { id: '1', email: 'u@example.com' };
-    mockService.findById.mockResolvedValue(user);
+  it('findOne should return a public profile', async () => {
+    const profile = { id: '1', username: 'u', role: 'student' };
+    mockService.getPublicProfile.mockResolvedValue(profile);
 
-    await expect(controller.findOne('1')).resolves.toEqual(user);
-    expect(mockService.findById).toHaveBeenCalledWith('1');
+    await expect(controller.findOne('1', {})).resolves.toEqual(profile);
+    expect(mockService.getPublicProfile).toHaveBeenCalledWith('1', undefined);
+  });
+
+  it('findOne should pass the viewer id when authenticated', async () => {
+    const profile = { id: '1', username: 'u', role: 'student', email: 'u@example.com' };
+    mockService.getPublicProfile.mockResolvedValue(profile);
+
+    await expect(controller.findOne('1', { user: { id: '1' } })).resolves.toEqual(profile);
+    expect(mockService.getPublicProfile).toHaveBeenCalledWith('1', '1');
   });
 
   it('update should update when same user id', async () => {
@@ -39,6 +49,41 @@ describe('UsersController', () => {
     await expect(controller.update('1', { username: 'X' }, { user: { id: '2' } })).rejects.toThrow(
       ForbiddenException
     );
+  });
+
+  describe('changeRole', () => {
+    it('updates the role and writes an audit log', async () => {
+      const updated = { id: 'target', role: 'instructor' };
+      mockService.changeRole.mockResolvedValue(updated);
+      const req = {
+        user: { id: 'admin-1' },
+        ip: '10.0.0.1',
+        headers: { 'user-agent': 'jest' },
+      };
+
+      await expect(
+        controller.changeRole('target', { role: 'instructor' } as any, req as any),
+      ).resolves.toEqual(updated);
+
+      expect(mockService.changeRole).toHaveBeenCalledWith('target', 'instructor');
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.role_changed',
+        'admin-1',
+        true,
+        { affectedId: 'target', newRole: 'instructor' },
+        '10.0.0.1',
+        'jest',
+      );
+    });
+
+    it('forbids an admin from changing their own role', async () => {
+      const req = { user: { id: 'admin-1' }, ip: '10.0.0.1', headers: {} };
+
+      await expect(
+        controller.changeRole('admin-1', { role: 'student' } as any, req as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockService.changeRole).not.toHaveBeenCalled();
+    });
   });
 });
 

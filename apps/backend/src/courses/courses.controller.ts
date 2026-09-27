@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
@@ -9,9 +10,7 @@ import {
   Query,
   UseGuards,
   Header,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -26,10 +25,14 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CourseQueryDto } from './dto/course-query.dto';
 import { ScheduleCourseDto } from './dto/schedule-course.dto';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../audit/audit-log.entity';
+import { CourseStatus } from './course.entity';
 
 /** Allowed MIME types for course thumbnails */
 const THUMBNAIL_MIME_TYPES = new Set([
@@ -45,7 +48,7 @@ const THUMBNAIL_MIME_TYPES = new Set([
 const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
 
 @ApiTags('courses')
-@Controller('courses')
+@Controller('v1/courses')
 export class CoursesController {
   constructor(private coursesService: CoursesService) {}
 
@@ -70,16 +73,24 @@ export class CoursesController {
     description: 'Filter by level',
   })
   @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'Filter by course category',
+  })
+  @ApiQuery({
     name: 'language',
     required: false,
     description: 'Filter by BCP-47 language code (e.g. "en", "es", "fr", "ar")',
   })
   @ApiQuery({
-    name: 'tags',
+    name: 'categoryId',
     required: false,
-    isArray: true,
-    description: 'Filter by tags (comma-separated or repeated). Courses must match ALL provided tags.',
-    example: 'defi,nft',
+    description: 'Filter by category UUID',
+  })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'Filter by category slug (e.g. "blockchain")',
   })
   @ApiQuery({
     name: 'page',
@@ -98,11 +109,20 @@ export class CoursesController {
     description: 'Returns paginated published courses',
     schema: { example: { data: [], total: 0, page: 1, limit: 20 } },
   })
-  findAll(@Query() query: CourseQueryDto) {
+  findAll(@Query() query: CourseQueryDto = {}) {
     return this.coursesService.findAll(query);
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'Search published courses by title and description' })
+  @ApiQuery({ name: 'q', required: false, description: 'Search query; empty returns all courses' })
+  @ApiResponse({ status: 200, description: 'Ranked, paginated course search results' })
+  search(@Query() query: CourseQueryDto) {
+    return this.coursesService.search(query.q ?? query.search ?? '', query.page, query.limit);
+  }
+
   @Get(':id')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get a course by ID' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -114,9 +134,15 @@ export class CoursesController {
     description: 'Returns a single course',
     schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
   })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  findOne(@Param('id') id: string) {
-    return this.coursesService.findOne(id);
+  @ApiResponse({
+    status: 404,
+    description: 'Course not found, or not visible to the requester (draft/pending courses)',
+  })
+  findOne(
+    @Param('id') id: string,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    return this.coursesService.findOneForViewer(id, req.user);
   }
 
   @Post()
@@ -223,72 +249,68 @@ export class CoursesController {
     return this.coursesService.publishNow(id);
   }
 
-  @Post(':id/thumbnail')
+  @Put(':id/publish')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload a thumbnail image for a course (max 2 MB, image files only)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: 'Thumbnail image file (JPEG, PNG, GIF, WebP, SVG). Max 2 MB.',
-        },
-      },
-      required: ['file'],
-    },
+  @ApiOperation({
+    summary: 'Submit a draft course for admin review (DRAFT -> PENDING_REVIEW)',
   })
-  @ApiResponse({ status: 200, description: 'Thumbnail URL saved to the course record' })
-  @ApiResponse({ status: 400, description: 'File missing, too large, or not an image' })
+  @ApiResponse({ status: 200, description: 'Course moved to PENDING_REVIEW' })
+  @ApiResponse({
+    status: 400,
+    description: 'Course is not a draft, or is missing title/description/modules',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the course owner' })
   @ApiResponse({ status: 404, description: 'Course not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: THUMBNAIL_MAX_BYTES },
-      fileFilter: (_req, file, cb) => {
-        if (THUMBNAIL_MIME_TYPES.has(file.mimetype)) {
-          cb(null, true);
-        } else {
-          cb(
-            new BadRequestException(
-              `Unsupported file type "${file.mimetype}". Allowed types: ${[...THUMBNAIL_MIME_TYPES].join(', ')}`,
-            ),
-            false,
-          );
-        }
-      },
-    }),
-  )
-  async uploadThumbnail(
+  submitForReview(
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
+    @Request() req: { user: { id: string; role: string } },
   ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded. Provide a "file" field in the form data.');
-    }
+    return this.coursesService.submitForReview(id, req.user);
+  }
 
-    if (file.size > THUMBNAIL_MAX_BYTES) {
-      throw new BadRequestException(
-        `File exceeds the 2 MB size limit (received ${(file.size / 1024 / 1024).toFixed(2)} MB).`,
-      );
-    }
+  @Put(':id/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Approve a course pending review and publish it (PENDING_REVIEW -> PUBLISHED)',
+  })
+  @ApiResponse({ status: 200, description: 'Course published' })
+  @ApiResponse({
+    status: 400,
+    description: 'Course is not pending review, or is missing title/description/modules',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  approve(@Param('id') id: string) {
+    return this.coursesService.approveCourse(id);
+  }
 
-    // In production this buffer would be streamed to S3/CDN and a URL returned.
-    // For now we store a data URI so the endpoint is immediately functional
-    // without external storage dependencies.
-    const base64 = file.buffer.toString('base64');
-    const thumbnailUrl = `data:${file.mimetype};base64,${base64}`;
-
-    const updated = await this.coursesService.update(id, { thumbnailUrl });
-    return { thumbnailUrl: updated.thumbnailUrl };
+  @Put(':id/archive')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'instructor')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Archive a published course (PUBLISHED -> ARCHIVED)' })
+  @ApiResponse({ status: 200, description: 'Course archived' })
+  @ApiResponse({ status: 400, description: 'Course is not currently published' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the course owner' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  archive(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string; role: string } },
+  ) {
+    return this.coursesService.archiveCourse(id, req.user);
   }
 }
 
@@ -330,4 +352,176 @@ function resolveScheduledAt(isoString: string, timezone?: string): Date {
   );
   const offsetMs = localDate.getTime() - naive.getTime();
   return new Date(naive.getTime() - offsetMs);
+}
+
+/**
+ * Admin-only course management controller.
+ * Handles listing all courses (regardless of status), approval, archive/unarchive, and deletion.
+ */
+@ApiTags('admin')
+@ApiBearerAuth()
+@Controller('admin/courses')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class AdminCoursesController {
+  constructor(
+    private readonly coursesService: CoursesService,
+    private readonly auditService: AuditService,
+  ) {}
+
+  @Get()
+  @Roles('admin')
+  @ApiOperation({ summary: 'List all courses (admin — all statuses, with filters)' })
+  @ApiResponse({ status: 200, description: 'Paginated list of courses' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiQuery({ name: 'status', required: false, enum: CourseStatus })
+  @ApiQuery({ name: 'instructorId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  findAllAdmin(
+    @Query('status') status?: string,
+    @Query('instructorId') instructorId?: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.coursesService.findAllAdmin({
+      status: status as CourseStatus | undefined,
+      instructorId,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
+  }
+
+  @Post(':id/approve')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Approve a pending course (publishes it)' })
+  @ApiResponse({ status: 200, description: 'Course approved and published' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async approveCourse(
+    @Param('id') id: string,
+    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
+  ) {
+    const course = await this.coursesService.approveCourse(id);
+
+    await this.auditService.log(
+      AuditAction.COURSE_APPROVED,
+      req.user.id,
+      true,
+      {
+        resourceType: 'course',
+        resourceId: id,
+        changes: { status: { from: CourseStatus.PENDING, to: CourseStatus.PUBLISHED } },
+        metadata: { courseTitle: course.title },
+        ipAddress: req.ip,
+        userAgent: req.headers?.['user-agent'],
+      },
+    );
+
+    return course;
+  }
+
+  @Post(':id/archive')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Archive a course' })
+  @ApiResponse({ status: 200, description: 'Course archived' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async archiveCourse(
+    @Param('id') id: string,
+    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
+  ) {
+    const { course, previousStatus } = await this.coursesService.archiveCourse(id);
+
+    await this.auditService.log(
+      AuditAction.COURSE_ARCHIVED,
+      req.user.id,
+      true,
+      {
+        resourceType: 'course',
+        resourceId: id,
+        changes: { status: { from: previousStatus, to: CourseStatus.ARCHIVED } },
+        metadata: { courseTitle: course.title },
+        ipAddress: req.ip,
+        userAgent: req.headers?.['user-agent'],
+      },
+    );
+
+    return course;
+  }
+
+  @Post(':id/unarchive')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Unarchive a course (restores to published)' })
+  @ApiResponse({ status: 200, description: 'Course unarchived' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async unarchiveCourse(
+    @Param('id') id: string,
+    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
+  ) {
+    const course = await this.coursesService.unarchiveCourse(id);
+
+    await this.auditService.log(
+      AuditAction.COURSE_UNARCHIVED,
+      req.user.id,
+      true,
+      {
+        resourceType: 'course',
+        resourceId: id,
+        changes: { status: { from: CourseStatus.ARCHIVED, to: CourseStatus.PUBLISHED } },
+        metadata: { courseTitle: course.title },
+        ipAddress: req.ip,
+        userAgent: req.headers?.['user-agent'],
+      },
+    );
+
+    return course;
+  }
+
+  @Delete(':id')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Permanently delete a course (admin only)' })
+  @ApiResponse({ status: 200, description: 'Course deleted' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async deleteCourse(
+    @Param('id') id: string,
+    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
+  ) {
+    const course = await this.coursesService.findOneAdmin(id);
+    const result = await this.coursesService.delete(id);
+
+    await this.auditService.log(
+      AuditAction.COURSE_DELETED,
+      req.user.id,
+      true,
+      {
+        resourceType: 'course',
+        resourceId: id,
+        metadata: { courseTitle: course.title },
+        ipAddress: req.ip,
+        userAgent: req.headers?.['user-agent'],
+      },
+    );
+
+    return result;
+  }
 }

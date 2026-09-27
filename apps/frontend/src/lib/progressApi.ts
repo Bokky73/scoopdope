@@ -29,6 +29,14 @@ export interface ModuleProgress {
   quizScores: QuizScore[];
 }
 
+/** Estimated time left in the course, based on the student's own completion pace. */
+export interface EstimatedCompletionTime {
+  remainingLessons: number;
+  remainingMinutes: number;
+  /** null when there isn't enough history yet to estimate a pace */
+  estimatedDaysRemaining: number | null;
+}
+
 export interface CourseProgressPayload {
   courseId: string;
   courseTitle: string;
@@ -39,88 +47,74 @@ export interface CourseProgressPayload {
   modules: ModuleProgress[];
   /** ISO timestamp of the last recorded activity */
   lastActivityAt: string | null;
+  estimatedCompletionTime: EstimatedCompletionTime;
+}
+
+// ── Backend response shape ───────────────────────────────────────────────────
+
+interface CourseProgressResponse {
+  courseId: string;
+  courseTitle: string;
+  overall_completion_percentage: number;
+  modules: Array<{
+    id: string;
+    title: string;
+    status: 'completed' | 'in_progress' | 'not_started';
+    completionPercentage: number;
+  }>;
+  lessons: Array<{
+    id: string;
+    title: string;
+    moduleId: string;
+    status: 'completed' | 'in_progress' | 'not_started';
+    last_accessed_at: string | null;
+  }>;
+  estimatedCompletionTime: EstimatedCompletionTime;
+  lastActivityAt: string | null;
 }
 
 // ── Fetcher ───────────────────────────────────────────────────────────────────
 
-/**
- * Fetches structured progress data for a given course and user.
- *
- * Strategy: the backend's existing progress endpoint returns a flat list
- * (`GET /users/:userId/progress`). We also fetch course modules/lessons to
- * build the per-module breakdown the UI needs. Both calls run in parallel.
- *
- * When the dedicated `GET /v1/progress/:courseId` endpoint is added to the
- * backend, replace this function body with a single api.get call and keep
- * the return type identical.
- */
+/** Fetches per-module/per-lesson progress for a course from `GET /courses/:courseId/progress`. */
 export async function fetchCourseProgress(
   courseId: string,
-  userId: string,
+  _userId: string,
 ): Promise<CourseProgressPayload> {
-  const [progressRes, modulesRes, courseRes] = await Promise.all([
-    api.get<Array<{ courseId: string; lessonId: string; progressPct: number; completedAt: string | null }>>(`/users/${userId}/progress`),
-    api.get<Array<{ id: string; title: string; order: number; lessons: Array<{ id: string; title: string }> }>>(`/courses/${courseId}/modules`),
-    api.get<{ id: string; title: string }>(`/courses/${courseId}`),
-  ]);
+  const { data } = await api.get<CourseProgressResponse>(`/courses/${courseId}/progress`);
 
-  // Flat progress records for this course, keyed by lessonId
-  const lessonProgressMap = new Map(
-    progressRes.data
-      .filter((p) => p.courseId === courseId)
-      .map((p) => [p.lessonId, p]),
-  );
-
-  // Build per-module breakdown
-  const modules: ModuleProgress[] = modulesRes.data.map((mod) => {
-    const lessons: LessonProgressDetail[] = (mod.lessons ?? []).map((lesson) => {
-      const record = lessonProgressMap.get(lesson.id);
-      return {
-        lessonId: lesson.id,
-        title: lesson.title,
-        completed: (record?.progressPct ?? 0) >= 100,
-        completedAt: record?.completedAt ?? null,
-      };
+  const lessonsByModule = new Map<string, LessonProgressDetail[]>();
+  for (const lesson of data.lessons) {
+    const list = lessonsByModule.get(lesson.moduleId) ?? [];
+    list.push({
+      lessonId: lesson.id,
+      title: lesson.title,
+      completed: lesson.status === 'completed',
+      completedAt: lesson.status === 'completed' ? lesson.last_accessed_at : null,
     });
+    lessonsByModule.set(lesson.moduleId, list);
+  }
 
-    const completed = lessons.filter((l) => l.completed).length;
-    const progressPct =
-      lessons.length > 0 ? Math.round((completed / lessons.length) * 100) : 0;
+  const modules: ModuleProgress[] = data.modules.map((mod, index) => ({
+    moduleId: mod.id,
+    title: mod.title,
+    order: index,
+    lessons: lessonsByModule.get(mod.id) ?? [],
+    progressPct: mod.completionPercentage,
+    // Quiz scores are fetched separately if available; default to empty
+    quizScores: [],
+  }));
 
-    return {
-      moduleId: mod.id,
-      title: mod.title,
-      order: mod.order,
-      lessons,
-      progressPct,
-      // Quiz scores are fetched separately if available; default to empty
-      quizScores: [],
-    };
-  });
-
-  const totalLessons = modules.reduce((sum, m) => sum + m.lessons.length, 0);
-  const completedLessons = modules.reduce(
-    (sum, m) => sum + m.lessons.filter((l) => l.completed).length,
-    0,
-  );
-  const overallProgressPct =
-    totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-
-  // Most recent completion timestamp across all lessons
-  const timestamps = modules
-    .flatMap((m) => m.lessons)
-    .map((l) => l.completedAt)
-    .filter((t): t is string => t !== null)
-    .sort()
-    .reverse();
+  const totalLessons = data.lessons.length;
+  const completedLessons = data.lessons.filter((l) => l.status === 'completed').length;
 
   return {
     courseId,
-    courseTitle: courseRes.data?.title ?? courseId,
-    overallProgressPct,
+    courseTitle: data.courseTitle ?? courseId,
+    overallProgressPct: data.overall_completion_percentage,
     totalLessons,
     completedLessons,
-    modules: modules.sort((a, b) => a.order - b.order),
-    lastActivityAt: timestamps[0] ?? null,
+    modules,
+    lastActivityAt: data.lastActivityAt ?? null,
+    estimatedCompletionTime: data.estimatedCompletionTime,
   };
 }

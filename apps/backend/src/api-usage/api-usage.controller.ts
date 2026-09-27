@@ -1,5 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -63,5 +63,26 @@ export class ApiUsageController {
   @ApiQuery({ name: 'threshold', required: false, type: Number })
   checkAlerts(@Query('threshold') threshold?: string) {
     return this.apiUsageService.checkUsageAlerts(threshold ? Number(threshold) : 100);
+  }
+
+  @Get('statistics')
+  @ApiOperation({
+    summary: 'Platform usage statistics: totals, percentiles, active users, top endpoints, daily trend',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Number of days to aggregate (default 30, max 90)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Aggregated platform usage statistics for the requested period',
+  })
+  getStatistics(
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    const clamped = Math.min(Math.max(days, 1), 90);
+    return this.apiUsageService.getStatistics(clamped);
   }
 }

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, IsIn, Min, MinLength, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsIn, Min, MinLength, IsBoolean, IsArray } from 'class-validator';
 import { Trim, Sanitize } from 'class-sanitizer';
 import { StripHtmlSanitizer } from '../../common/sanitizers/strip-html.sanitizer';
 
@@ -26,6 +26,10 @@ export class CreateCourseDto {
   language?: string;
 
   @IsOptional() @IsString() @Trim() thumbnailUrl?: string;
+
+  @IsOptional() @IsString() @Trim() category?: string;
+
+  @IsOptional() @IsArray() @IsString({ each: true }) learningOutcomes?: string[];
 
   @IsOptional() @IsString({ each: true }) skills?: string[];
 

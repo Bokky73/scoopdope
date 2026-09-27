@@ -1,0 +1,102 @@
+{
+  "contract_name": "certificate",
+  "version": "1.0.0",
+  "network": "stellar/soroban",
+  "functions": [
+    {
+      "name": "initialize",
+      "doc": "Initialize the certificate contract with an admin address.",
+      "inputs": [
+        { "name": "admin", "type": "address" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_admin",
+      "doc": "Return the current admin address.",
+      "inputs": [],
+      "outputs": [{ "type": "address" }]
+    },
+    {
+      "name": "mint_certificate",
+      "doc": "Mint a certificate NFT for a student upon course completion. Admin only.",
+      "inputs": [
+        { "name": "owner", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "metadata_url", "type": "string" }
+      ],
+      "outputs": [{ "type": "u64" }]
+    },
+    {
+      "name": "revoke",
+      "doc": "Revoke an issued certificate. Admin only.",
+      "inputs": [
+        { "name": "certificate_id", "type": "u64" },
+        { "name": "reason", "type": "string" }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_certificate",
+      "doc": "Retrieve full certificate record by ID.",
+      "inputs": [
+        { "name": "certificate_id", "type": "u64" }
+      ],
+      "outputs": [{ "type": "CertificateRecord" }]
+    },
+    {
+      "name": "get_owner_certificates",
+      "doc": "Return a list of certificate IDs owned by an address.",
+      "inputs": [
+        { "name": "owner", "type": "address" }
+      ],
+      "outputs": [{ "type": "Vec<u64>" }]
+    },
+    {
+      "name": "is_revoked",
+      "doc": "Return true if the certificate has been revoked.",
+      "inputs": [
+        { "name": "certificate_id", "type": "u64" }
+      ],
+      "outputs": [{ "type": "bool" }]
+    },
+    {
+      "name": "get_revocation",
+      "doc": "Retrieve the revocation record for a revoked certificate.",
+      "inputs": [
+        { "name": "certificate_id", "type": "u64" }
+      ],
+      "outputs": [{ "type": "RevocationRecord" }]
+    }
+  ],
+  "types": {
+    "CertificateRecord": {
+      "fields": [
+        { "name": "id", "type": "u64" },
+        { "name": "owner", "type": "address" },
+        { "name": "course_id", "type": "symbol" },
+        { "name": "metadata_url", "type": "string" },
+        { "name": "issued_at", "type": "u64" }
+      ]
+    },
+    "RevocationRecord": {
+      "fields": [
+        { "name": "certificate_id", "type": "u64" },
+        { "name": "revoked_at", "type": "u64" },
+        { "name": "reason", "type": "string" }
+      ]
+    }
+  },
+  "events": [
+    {
+      "name": "mint",
+      "topics": ["mint", "certificate_id"],
+      "data": { "type": "CertificateRecord" }
+    },
+    {
+      "name": "revoke",
+      "topics": ["revoke", "certificate_id"],
+      "data": { "type": "RevocationRecord" }
+    }
+  ]
+}

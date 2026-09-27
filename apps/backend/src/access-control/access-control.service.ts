@@ -59,7 +59,7 @@ export class AccessControlService {
 
     // IP restrictions are checked after the grant state has been validated.
     if (access.allowedIpAddresses && access.allowedIpAddresses.length > 0) {
-      if (!access.allowedIpAddresses.includes(ipAddress)) {
+      if (!ipAddress || !access.allowedIpAddresses.includes(ipAddress)) {
         await this.logAccess(courseId, userId, 'access_denied', ipAddress, false, 'IP not allowed');
         return { allowed: false, reason: 'IP not allowed' };
       }
@@ -124,7 +124,7 @@ export class AccessControlService {
 
     // Once the explicit revoke and expiry checks pass, a valid subscription-tier
     // record allows content access. If none of the above branches fire, access is granted.
-    await this.logAccess(courseId, userId, 'content_accessed', ipAddress, true, null, attemptType, contentId);
+    await this.logAccess(courseId, userId, 'content_accessed', ipAddress, true, undefined, attemptType, contentId);
   }
 
   /**

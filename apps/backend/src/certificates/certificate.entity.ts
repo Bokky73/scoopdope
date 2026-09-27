@@ -5,11 +5,13 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Course } from '../courses/course.entity';
 
 @Entity('certificates')
+@Unique(['userId', 'courseId'])
 export class Certificate {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

@@ -51,7 +51,8 @@ export class StellarAuthService {
       );
       clientPublicKey = clientAccountID;
     } catch (err) {
-      throw new UnauthorizedException(`Invalid SEP-0010 challenge: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      throw new UnauthorizedException(`Invalid SEP-0010 challenge: ${message}`);
     }
 
     // Find or auto-provision a user for this Stellar account

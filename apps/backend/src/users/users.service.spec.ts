@@ -12,7 +12,11 @@ describe('UsersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new UsersService(mockRepo as unknown as any);
+    service = new UsersService(
+      mockRepo as unknown as any,
+      mockRepo as unknown as any,
+      mockRepo as unknown as any,
+    );
   });
 
   it('findByEmail should query by email', async () => {
@@ -58,6 +62,30 @@ describe('UsersService', () => {
     mockRepo.findOne.mockResolvedValue(null);
 
     await expect(service.update('1', { username: 'abc' })).rejects.toThrow('User not found');
+  });
+
+  describe('changeRole', () => {
+    it('rejects an invalid role value with BadRequestException', async () => {
+      await expect(service.changeRole('1', 'superuser')).rejects.toThrow('Invalid role');
+      expect(mockRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for a nonexistent user', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.changeRole('1', 'instructor')).rejects.toThrow('User not found');
+    });
+
+    it('persists a valid role change', async () => {
+      const existing = { id: '1', email: 'test@example.com', role: 'student' } as User;
+      mockRepo.findOne.mockResolvedValue(existing);
+      mockRepo.save.mockImplementation((u) => Promise.resolve(u));
+
+      const result = await service.changeRole('1', 'instructor');
+
+      expect(result.role).toBe('instructor');
+      expect(mockRepo.save).toHaveBeenCalledWith({ ...existing, role: 'instructor' });
+    });
   });
 
   it('update should block role escalation via profile update', async () => {

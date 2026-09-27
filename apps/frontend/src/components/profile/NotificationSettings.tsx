@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { Button } from '@/components/ui/Button';
+import { useOnboardingStore } from '@/store/onboarding.store';
 
 interface Preferences {
   courseUpdates: boolean;
@@ -17,6 +19,8 @@ export function NotificationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { isSupported, permission, subscribe, unsubscribe } = usePushNotifications();
+  const { restartOnboarding } = useOnboardingStore();
+  const router = useRouter();
 
   useEffect(() => {
     const fetchPreferences = async () => {
@@ -137,6 +141,24 @@ export function NotificationSettings() {
       </div>
       
       {saving && <p className="text-xs text-blue-600 animate-pulse">Saving changes...</p>}
+
+      {/* Onboarding */}
+      <div className="pt-4 border-t dark:border-gray-800">
+        <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Onboarding</h4>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+          Revisit the onboarding tour to learn about platform features.
+        </p>
+        <Button
+          variant="outline"
+          aria-label="Restart the onboarding tour"
+          onClick={() => {
+            restartOnboarding();
+            router.push('/onboarding');
+          }}
+        >
+          Restart Onboarding Tour
+        </Button>
+      </div>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { Progress } from '../progress/progress.entity';
 import { Review } from '../courses/review.entity';
 import { MetricsService } from '../metrics/metrics.service';
 
-interface ScoredCourse extends Course {
+export interface ScoredCourse extends Course {
   score: number;
   matchReasons: string[];
   skillOverlap: number;

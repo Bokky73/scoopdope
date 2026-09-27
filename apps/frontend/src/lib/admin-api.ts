@@ -74,3 +74,48 @@ export const togglePublish = (id: string, isPublished: boolean) =>
   api.patch(`/courses/${id}`, { isPublished });
 
 export const deleteCourse = (id: string) => api.delete(`/courses/${id}`);
+
+// ── Usage Statistics ──────────────────────────────────────────────────────────
+
+export interface UsageStatisticsPeriod {
+  from: string;
+  to: string;
+  days: number;
+}
+
+export interface UsageTopEndpoint {
+  endpoint: string;
+  method: string;
+  requestCount: number;
+  avgResponseTimeMs: number;
+  errorCount: number;
+}
+
+export interface UsageDailyTrend {
+  date: string;
+  requestCount: number;
+  errorCount: number;
+  avgResponseTimeMs: number;
+}
+
+export interface UsageStatistics {
+  period: UsageStatisticsPeriod;
+  totalRequests: number;
+  errorRate: number;
+  avgResponseTimeMs: number;
+  p50ResponseTimeMs: number;
+  p95ResponseTimeMs: number;
+  p99ResponseTimeMs: number;
+  dailyActiveUsers: number;
+  weeklyActiveUsers: number;
+  monthlyActiveUsers: number;
+  topEndpoints: UsageTopEndpoint[];
+  dailyTrend: UsageDailyTrend[];
+}
+
+export async function fetchUsageStatistics(days = 30): Promise<UsageStatistics> {
+  const { data } = await api.get<UsageStatistics>('/api-usage/statistics', {
+    params: { days },
+  });
+  return data;
+}

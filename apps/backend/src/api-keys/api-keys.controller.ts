@@ -36,7 +36,7 @@ export class ApiKeysController {
 
   @Get('api-keys')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List API keys',
     description: 'Returns all API keys for the authenticated user with masked values.',
@@ -59,7 +59,7 @@ export class ApiKeysController {
 
   @Post('api-keys')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create API key',
     description:
@@ -82,7 +82,7 @@ export class ApiKeysController {
 
   @Patch('api-keys/:id')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update API key',
     description: 'Updates the name or description of an existing API key.',
@@ -104,7 +104,7 @@ export class ApiKeysController {
 
   @Delete('api-keys/:id')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Revoke API key',
     description: 'Revokes an API key. Revoked keys cannot be reactivated.',
@@ -122,7 +122,7 @@ export class ApiKeysController {
 
   @Post('api-keys/:id/rotate')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Rotate API key',
     description:
@@ -146,7 +146,7 @@ export class ApiKeysController {
   @Get('admin/api-keys')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List all API keys (admin)',
     description: 'Returns all API keys across the platform with pagination and filters.',
@@ -174,7 +174,7 @@ export class ApiKeysController {
   @Delete('admin/api-keys/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Force revoke API key (admin)',
     description: 'Forcefully revokes any API key on the platform.',
