@@ -219,6 +219,19 @@ export class UsersService {
   }
 
   /**
+   * #960 – Persist the account lockout counters.
+   *
+   * Kept out of the self-service `update()` whitelist on purpose: these fields
+   * are written by the auth flow only, never from a user-supplied payload.
+   */
+  async updateLoginLockout(
+    id: string,
+    data: { failedLoginAttempts: number; lastFailedLoginAt: Date | null; lockedUntil: Date | null },
+  ) {
+    await this.repo.update(id, data);
+  }
+
+  /**
    * Set a user's status (active / suspended / deactivated).
    * Returns the old status so callers can record a change delta.
    */

@@ -14,20 +14,26 @@ import { AuditService } from '../audit/audit.service';
 import { TokenService } from './token.service';
 import { MfaService } from './mfa.service';
 import { OAuthService } from './oauth.service';
-import { BadRequestException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import {
+  ACCOUNT_LOCKOUT_COOLDOWN_MS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+} from './account-lockout.constants';
 
 describe('AuthService', () => {
   let service: AuthService;
 
   const mockUsersService = {
     findByEmail: jest.fn(),
+    findByEmailWithPassword: jest.fn(),
     findById: jest.fn(),
     findByVerificationToken: jest.fn(),
     findByReferralCode: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateLoginLockout: jest.fn(),
   };
 
   const mockMailService = {
@@ -228,6 +234,125 @@ describe('AuthService', () => {
 
       const result = await service.login(email, password, 'BACKUPCODE');
       expect(result).toHaveProperty('access_token');
+    });
+  });
+
+  // ── login: account lockout (#960) ──────────────────────────────────────────
+
+  describe('login account lockout', () => {
+    const email = 'test@example.com';
+    const password = 'password123';
+    const baseUser = {
+      id: 'uuid',
+      email,
+      passwordHash: 'hashed',
+      isVerified: true,
+      isBanned: false,
+      role: 'student',
+      mfaEnabled: false,
+      failedLoginAttempts: 0,
+      lastFailedLoginAt: null,
+      lockedUntil: null,
+    };
+
+    beforeEach(() => {
+      jest.spyOn(bcrypt, 'compare').mockImplementation(() => Promise.resolve(false));
+      mockTokenService.issueTokenPair.mockResolvedValue({ access_token: 'tok', refresh_token: 'ref' });
+      mockUsersService.updateLoginLockout.mockResolvedValue(undefined);
+    });
+
+    it('records a failed attempt without locking below the threshold', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({ ...baseUser });
+
+      await expect(service.login(email, password)).rejects.toThrow(UnauthorizedException);
+
+      expect(mockUsersService.updateLoginLockout).toHaveBeenCalledWith(
+        'uuid',
+        expect.objectContaining({ failedLoginAttempts: 1, lockedUntil: null }),
+      );
+    });
+
+    it('locks the account once the threshold is reached', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({
+        ...baseUser,
+        failedLoginAttempts: MAX_FAILED_LOGIN_ATTEMPTS - 1,
+        lastFailedLoginAt: new Date(),
+      });
+
+      await expect(service.login(email, password)).rejects.toThrow(HttpException);
+
+      const [, persisted] = mockUsersService.updateLoginLockout.mock.calls[0];
+      expect(persisted.failedLoginAttempts).toBe(MAX_FAILED_LOGIN_ATTEMPTS);
+      expect(persisted.lockedUntil).toBeInstanceOf(Date);
+    });
+
+    it('rejects a locked account without running a bcrypt comparison', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({
+        ...baseUser,
+        lockedUntil: new Date(Date.now() + 60_000),
+      });
+
+      await expect(service.login(email, password)).rejects.toThrow(HttpException);
+      expect(bcrypt.compare).not.toHaveBeenCalled();
+    });
+
+    it('reports how long to wait in the locked response', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({
+        ...baseUser,
+        lockedUntil: new Date(Date.now() + 90_000),
+      });
+
+      await expect(service.login(email, password)).rejects.toMatchObject({
+        response: expect.objectContaining({ retryAfterSeconds: expect.any(Number) }),
+      });
+    });
+
+    it('unlocks and resets the counter once the cooldown has elapsed', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({
+        ...baseUser,
+        failedLoginAttempts: MAX_FAILED_LOGIN_ATTEMPTS,
+        lastFailedLoginAt: new Date(Date.now() - ACCOUNT_LOCKOUT_COOLDOWN_MS),
+        lockedUntil: new Date(Date.now() - 1_000),
+      });
+
+      await expect(service.login(email, password)).rejects.toThrow(UnauthorizedException);
+
+      expect(mockUsersService.updateLoginLockout).toHaveBeenNthCalledWith(1, 'uuid', {
+        failedLoginAttempts: 0,
+        lastFailedLoginAt: null,
+        lockedUntil: null,
+      });
+      // The stale counter restarts at 1 rather than re-locking immediately.
+      expect(mockUsersService.updateLoginLockout).toHaveBeenNthCalledWith(
+        2,
+        'uuid',
+        expect.objectContaining({ failedLoginAttempts: 1, lockedUntil: null }),
+      );
+    });
+
+    it('resets the counter after a successful login', async () => {
+      jest.spyOn(bcrypt, 'compare').mockImplementation(() => Promise.resolve(true));
+      mockUsersService.findByEmailWithPassword.mockResolvedValue({
+        ...baseUser,
+        failedLoginAttempts: 2,
+        lastFailedLoginAt: new Date(),
+      });
+
+      const result = await service.login(email, password);
+
+      expect(result).toHaveProperty('access_token');
+      expect(mockUsersService.updateLoginLockout).toHaveBeenCalledWith('uuid', {
+        failedLoginAttempts: 0,
+        lastFailedLoginAt: null,
+        lockedUntil: null,
+      });
+    });
+
+    it('does not count attempts against an unknown email', async () => {
+      mockUsersService.findByEmailWithPassword.mockResolvedValue(null);
+
+      await expect(service.login(email, password)).rejects.toThrow(UnauthorizedException);
+      expect(mockUsersService.updateLoginLockout).not.toHaveBeenCalled();
     });
   });
 

@@ -58,6 +58,18 @@ export class User {
   @Column({ nullable: true })
   lastLogin: Date | null;
 
+  /** Consecutive failed password attempts. Reset on success or once stale. */
+  @Column({ type: 'int', default: 0 })
+  failedLoginAttempts: number;
+
+  /** Timestamp of the most recent failed attempt, used to expire the counter. */
+  @Column({ type: 'timestamp', nullable: true })
+  lastFailedLoginAt: Date | null;
+
+  /** End of the lockout cooldown. Non-null and in the future means locked. */
+  @Column({ type: 'timestamp', nullable: true })
+  lockedUntil: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

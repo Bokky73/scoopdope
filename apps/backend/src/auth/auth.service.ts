@@ -5,6 +5,8 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -18,6 +20,11 @@ import { AuditAction } from '../audit/audit-log.entity';
 import { TokenService } from './token.service';
 import { MfaService } from './mfa.service';
 import { OAuthService } from './oauth.service';
+import {
+  ACCOUNT_LOCKOUT_COOLDOWN_MS,
+  FAILED_LOGIN_ATTEMPT_WINDOW_MS,
+  MAX_FAILED_LOGIN_ATTEMPTS,
+} from './account-lockout.constants';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -72,8 +79,60 @@ export class AuthService {
 
   async login(email: string, password: string, mfaToken?: string, ipAddress?: string, userAgent?: string) {
     const user = await this.usersService.findByEmailWithPassword(email);
-    if (!user || !(await bcryptLib.compare(password, user.passwordHash))) {
+    if (!user) {
       await this.auditService.log(AuditAction.LOGIN_FAILURE, null, false, { email }, ipAddress, userAgent);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // #960 – A cooldown that has elapsed clears the account and its counter, so
+    // that a single typo after waiting out the lockout does not re-lock it.
+    if (user.lockedUntil && !this.isAccountLocked(user)) {
+      await this.clearLoginLockout(user);
+    }
+
+    // Reject while the cooldown is still running, before spending a bcrypt
+    // comparison on an account we already know is locked.
+    if (this.isAccountLocked(user)) {
+      const retryAfterSeconds = this.lockoutRetryAfterSeconds(user);
+      await this.auditService.log(
+        AuditAction.LOGIN_FAILURE,
+        user.id,
+        false,
+        { reason: 'account_locked', retryAfterSeconds },
+        ipAddress,
+        userAgent,
+      );
+      throw this.accountLockedError(retryAfterSeconds);
+    }
+
+    if (!(await bcryptLib.compare(password, user.passwordHash))) {
+      const { failedLoginAttempts, lockedUntil } = this.nextFailedLoginState(user);
+      await this.usersService.updateLoginLockout(user.id, {
+        failedLoginAttempts,
+        lastFailedLoginAt: new Date(),
+        lockedUntil,
+      });
+
+      if (lockedUntil) {
+        await this.auditService.log(
+          AuditAction.LOGIN_FAILURE,
+          user.id,
+          false,
+          { reason: 'account_locked', failedLoginAttempts },
+          ipAddress,
+          userAgent,
+        );
+        throw this.accountLockedError(Math.ceil(ACCOUNT_LOCKOUT_COOLDOWN_MS / 1000));
+      }
+
+      await this.auditService.log(
+        AuditAction.LOGIN_FAILURE,
+        user.id,
+        false,
+        { reason: 'invalid_password', failedLoginAttempts },
+        ipAddress,
+        userAgent,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -106,6 +165,9 @@ export class AuthService {
       }
     }
 
+    // A verified password clears the streak so the next typo starts from zero.
+    await this.clearLoginLockout(user);
+
     const tokens = await this.tokenService.issueTokenPair(user.id, user.email, user.role);
     await this.auditService.log(AuditAction.LOGIN_SUCCESS, user.id, true, {}, ipAddress, userAgent);
     return {
@@ -121,6 +183,64 @@ export class AuthService {
         createdAt: user.createdAt,
       },
     };
+  }
+
+  /**
+   * #960 – Account lockout after failed login attempts
+   *
+   * An account counts as locked only while `lockedUntil` is still in the
+   * future, so the cooldown expires on its own without an admin intervention.
+   */
+  private isAccountLocked(user: User, now: Date = new Date()): boolean {
+    if (!user.lockedUntil) return false;
+    return new Date(user.lockedUntil).getTime() > now.getTime();
+  }
+
+  private lockoutRetryAfterSeconds(user: User, now: Date = new Date()): number {
+    if (!user.lockedUntil) return Math.ceil(ACCOUNT_LOCKOUT_COOLDOWN_MS / 1000);
+    return Math.max(1, Math.ceil((new Date(user.lockedUntil).getTime() - now.getTime()) / 1000));
+  }
+
+  /**
+   * Counter and cooldown arithmetic for a single failed password attempt.
+   * A counter that has been idle for longer than the attempt window restarts at
+   * zero, so occasional typos never accumulate into a lockout.
+   */
+  private nextFailedLoginState(user: User, now: Date = new Date()): { failedLoginAttempts: number; lockedUntil: Date | null } {
+    const lastFailure = user.lastFailedLoginAt ? new Date(user.lastFailedLoginAt).getTime() : null;
+    const isStale = lastFailure === null || now.getTime() - lastFailure > FAILED_LOGIN_ATTEMPT_WINDOW_MS;
+    const failedLoginAttempts = (isStale ? 0 : user.failedLoginAttempts ?? 0) + 1;
+
+    return {
+      failedLoginAttempts,
+      lockedUntil:
+        failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+          ? new Date(now.getTime() + ACCOUNT_LOCKOUT_COOLDOWN_MS)
+          : null,
+    };
+  }
+
+  /** Clear the failure counter and any active cooldown for a user. */
+  private async clearLoginLockout(user: User) {
+    user.failedLoginAttempts = 0;
+    user.lastFailedLoginAt = null;
+    user.lockedUntil = null;
+    await this.usersService.updateLoginLockout(user.id, {
+      failedLoginAttempts: 0,
+      lastFailedLoginAt: null,
+      lockedUntil: null,
+    });
+  }
+
+  private accountLockedError(retryAfterSeconds: number): HttpException {
+    return new HttpException(
+      {
+        statusCode: HttpStatus.LOCKED,
+        message: `Account temporarily locked after ${MAX_FAILED_LOGIN_ATTEMPTS} failed login attempts. Try again in ${retryAfterSeconds} seconds.`,
+        retryAfterSeconds,
+      },
+      HttpStatus.LOCKED,
+    );
   }
 
   async refresh(rawRefreshToken: string) {

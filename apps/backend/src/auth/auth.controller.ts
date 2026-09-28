@@ -208,7 +208,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login with email and password',
     description:
-      'Authenticates a user and returns JWT tokens along with the user profile. Rate-limited to 5 attempts per minute per IP to prevent brute-force attacks. Returns 401 for both unknown email and incorrect password to avoid user enumeration.',
+      'Authenticates a user and returns JWT tokens along with the user profile. Rate-limited to 5 attempts per minute per IP to prevent brute-force attacks. Returns 401 for both unknown email and incorrect password to avoid user enumeration. Independently of the per-IP limit, an account is locked for a cooldown period after too many consecutive failed attempts, which returns 423 along with the number of seconds to wait.',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
@@ -234,6 +234,11 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized — invalid email or incorrect password' })
   @ApiResponse({ status: 403, description: 'Forbidden — unverified email or admin MFA not set up' })
   @ApiResponse({ status: 429, description: 'Too many requests — rate limit of 5 per minute exceeded' })
+  @ApiResponse({
+    status: 423,
+    description:
+      'Locked — too many consecutive failed attempts for this account. The body includes `retryAfterSeconds`.',
+  })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   login(@Body() dto: LoginDto, @Req() req: { ip: string; headers: Record<string, string> }) {
     return this.authService.login(
