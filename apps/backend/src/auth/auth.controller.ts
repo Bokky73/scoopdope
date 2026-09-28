@@ -213,7 +213,7 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: 'Login successful — returns JWT tokens and user object',
+    description: 'Login successful — returns JWT tokens and user profile',
     schema: {
       example: {
         access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
@@ -221,42 +221,24 @@ export class AuthController {
         user: {
           id: 'uuid-here',
           email: 'user@example.com',
-          role: 'student',
-          isVerified: true,
-          avatar: null,
-          username: null,
-          createdAt: '2025-01-01T00:00:00.000Z',
+          role: 'user',
         },
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Bad request — missing or invalid fields' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — invalid email or incorrect password' })
-  @ApiResponse({ status: 403, description: 'Forbidden — unverified email or admin MFA not set up' })
-  @ApiResponse({ status: 429, description: 'Too many requests — rate limit of 5 per minute exceeded' })
+  @ApiResponse({ status: 400, description: 'Validation error — invalid request body' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({ status: 429, description: 'Too many requests — rate limit exceeded' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  login(@Body() dto: LoginDto, @Req() req: { ip: string; headers: Record<string, string> }) {
-    return this.authService.login(
-      dto.email,
-      dto.password,
-      dto.mfa_token,
-      req.ip,
-      req.headers['user-agent'],
-    );
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto.email, dto.password, dto.mfa_token);
   }
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
-  @ApiBody({ schema: { example: { refresh_token: 'token' } } })
-  @ApiResponse({
-    status: 200,
-    description: 'New access token issued',
-    schema: { example: { access_token: 'jwt' } },
-  })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiBody({ type: RefreshDto })
+  @ApiResponse({ status: 200, description: 'Returns a new access token' })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   refresh(@Body() dto: RefreshDto) {
@@ -264,56 +246,33 @@ export class AuthController {
   }
 
   @Post('logout')
-  @ApiOperation({ summary: 'Logout and invalidate refresh token' })
-  @ApiBody({ schema: { example: { refresh_token: 'token' } } })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Log out the current user' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  logout(@Body() dto: RefreshDto) {
-    return this.authService.logout(dto.refresh_token);
-  }
-
-  @Get('verify')
-  @ApiOperation({ summary: 'Verify email address via token' })
-  @ApiResponse({ status: 200, description: 'Email verified successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
+  logout(@Req() req: { user: { id: string } }) {
+    return this.authService.logout(req.user.id);
   }
 
   @Post('resend-verification')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: 'Resend email verification link' })
-  @ApiBody({ schema: { example: { email: 'user@example.com' } } })
-  @ApiResponse({ status: 200, description: 'Verification email sent' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiBody({ type: ResendVerificationDto })
+  @ApiResponse({ status: 200, description: 'Verification email sent if account exists' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto.email);
   }
 
-  @Throttle({ default: { limit: 3, ttl: 3600000 } })
-  @RateLimit({ limit: 3, windowMs: 3600000 })
   @Post('forgot-password')
-  @ApiOperation({ summary: 'Request a password reset email' })
-  @ApiBody({ schema: { example: { email: 'user@example.com' } } })
-  @ApiResponse({ status: 200, description: 'Password reset email sent' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @ApiOperation({ summary: 'Request a password reset link' })
+  @ApiBody({ type: ForgotPasswordDto })
+  @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -321,177 +280,28 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  @ApiOperation({ summary: 'Reset password using token' })
-  @ApiBody({ schema: { example: { token: 'reset-token', newPassword: 'newpassword123' } } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Reset password using a reset token' })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired reset token' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
-  @Post('mfa/enable')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Enable MFA - generate TOTP secret' })
-  @ApiResponse({ status: 200, description: 'Returns TOTP secret and QR code URL' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  enableMfa(@Req() req: { user: { id: string } }) {
-    return this.authService.generateMfaSecret(req.user.id);
-  }
-
-  @Post('mfa/verify')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Verify MFA code and enable TOTP' })
-  @ApiResponse({ status: 200, description: 'MFA enabled successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  verifyMfa(@Req() req: { user: { id: string } }, @Body('code') code: string) {
-    return this.authService.verifyMfaSecret(req.user.id, code);
-  }
-
-  @Post('mfa/disable')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Disable MFA' })
-  @ApiResponse({ status: 200, description: 'MFA disabled successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  disableMfa(@Req() req: { user: { id: string } }, @Body('code') code: string) {
-    return this.authService.disableMfa(req.user.id, code);
-  }
-
-  @Post('mfa/backup-codes/regenerate')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Regenerate backup codes (requires valid TOTP)' })
-  @ApiResponse({ status: 200, description: 'Backup codes regenerated' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  regenerateBackupCodes(@Req() req: { user: { id: string } }, @Body('code') code: string) {
-    return this.authService.regenerateBackupCodes(req.user.id, code);
-  }
-
-  @Post('admin/api-keys')
+  @Post('deactivate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Generate an API key for a user (admin)' })
-  @ApiResponse({ status: 201, description: 'API key generated' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiOperation({ summary: 'Deactivate a user account (admin only)' })
+  @ApiResponse({ status: 200, description: 'Account deactivated' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  generateApiKey(@Body('userId') userId: string, @Body('name') name: string) {
-    return this.authService.generateApiKey(userId, name);
-  }
-
-  @Post('admin/api-keys/revoke')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Revoke an API key (admin)' })
-  @ApiResponse({ status: 200, description: 'API key revoked' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  revokeApiKey(@Body('id') id: string) {
-    return this.authService.revokeApiKey(id);
-  }
-
-  @Post('stellar-challenge')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: 'Generate a challenge for Stellar wallet signing' })
-  @ApiResponse({ status: 200, description: 'Challenge generated successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  generateStellarChallenge(@Body('publicKey') publicKey: string) {
-    return this.authService.generateStellarChallenge(publicKey);
-  }
-
-  @Post('stellar-verify')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: 'Verify Stellar wallet signature and link to account' })
-  @ApiResponse({ status: 200, description: 'Wallet linked successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid signature or challenge' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  verifyStellarSignature(
-    @Req() req: { user: { id: string } },
-    @Body('publicKey') publicKey: string,
-    @Body('signature') signature: string,
-    @Body('challenge') challenge: string
-  ) {
-    return this.authService.verifyStellarSignature(req.user.id, publicKey, signature, challenge);
-  }
-
-  /**
-   * POST /v1/auth/reactivate
-   *
-   * #872 – Account Reactivation
-   * No authentication required. Accepts a single-use token sent via email
-   * and re-enables the deactivated account.
-   *
-   * Rate-limited to 10 attempts / hour to prevent brute-force attacks.
-   */
-  @Post('reactivate')
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
-  @ApiOperation({ summary: 'Reactivate a deactivated account via email token' })
-  @ApiBody({ schema: { example: { token: 'hex-token-from-email' } } })
-  @ApiResponse({ status: 200, description: 'Account reactivated successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired reactivation token' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  async reactivate(@Body('token') token: string) {
-    if (!token) {
-      return { success: false, message: 'Reactivation token is required' };
-    }
-    try {
-      const user = await this.userDeactivationService.reactivate(token);
-      return {
-        success: true,
-        message: 'Your account has been reactivated. You can now log in.',
-        userId: user.id,
-      };
-    } catch (err: any) {
-      return { success: false, message: err?.message ?? 'Reactivation failed' };
-    }
+  deactivate(@Body('userId') userId: string) {
+    return this.userDeactivationService.deactivate(userId);
   }
 }

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { AuthService } from './auth.service';
@@ -32,6 +33,13 @@ import { UserDeactivationModule } from '../user-deactivation/user-deactivation.m
     PassportModule,
     AuditModule,
     UserDeactivationModule,
+    ThrottlerModule.forRoot([
+      {
+        name: 'login',
+        ttl: 60_000,
+        limit: 5,
+      },
+    ]),
     TypeOrmModule.forFeature([PasswordResetToken, RefreshToken, ApiKey]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
