@@ -17,6 +17,7 @@ import { CoursesService } from '../courses/courses.service';
 import { CourseStatus } from '../courses/course.entity';
 import { MetricsService } from '../metrics/metrics.service';
 import { StellarService } from '../stellar/stellar.service';
+import { redactErrorMessage, redactStackTrace } from '../common/utils/log-redactor';
 
 @Injectable()
 export class EnrollmentsService {
@@ -70,21 +71,22 @@ export class EnrollmentsService {
         `Enrollment ${enrollment.id} anchored on-chain (tx: ${transactionHash})`,
       );
     } catch (err: any) {
+      const failure = redactErrorMessage(err);
       this.logger.error(
-        `On-chain enrollment failed for user=${userId} course=${courseId}: ${err.message}`,
-        err.stack,
+        `On-chain enrollment failed for user=${userId} course=${courseId}: ${failure}`,
+        redactStackTrace(err),
       );
 
       // Remove the DB row — keeps the database consistent.
       await this.repo.remove(enrollment).catch((removeErr) =>
         this.logger.error(
-          `Failed to remove enrollment after on-chain failure: ${removeErr.message}`,
+          `Failed to remove enrollment after on-chain failure: ${redactErrorMessage(removeErr)}`,
         ),
       );
 
       throw new InternalServerErrorException({
         message: 'Failed to record enrollment on the Stellar network. Please try again.',
-        detail: err.message,
+        detail: failure,
       });
     }
 

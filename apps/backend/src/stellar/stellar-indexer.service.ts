@@ -6,6 +6,7 @@ import { SorobanRpc } from '@stellar/stellar-sdk';
 import { CredentialsService } from '../credentials/credentials.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { redactErrorMessage, redactStackTrace } from '../common/utils/log-redactor';
 
 const LAST_LEDGER_KEY = 'indexer:last_ledger';
 
@@ -72,7 +73,10 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
 
       for (const event of events ?? []) {
         await this.handleEvent(event).catch((err) =>
-          this.logger.error(`Error handling event: ${err.message}`, err.stack)
+          this.logger.error(
+            `Error handling event: ${redactErrorMessage(err)}`,
+            redactStackTrace(err),
+          )
         );
       }
 
@@ -80,8 +84,7 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
         await this.cacheManager.set(LAST_LEDGER_KEY, latestLedger, 0);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Poll error: ${message}`);
+      this.logger.error(`Poll error: ${redactErrorMessage(err)}`);
     }
   }
 

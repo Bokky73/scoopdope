@@ -18,6 +18,7 @@ import { Progress } from '../progress/progress.entity';
 import { CourseModule } from '../courses/course-module.entity';
 import { Lesson } from '../courses/lesson.entity';
 import { StellarService } from '../stellar/stellar.service';
+import { redactErrorMessage, redactStackTrace } from '../common/utils/log-redactor';
 import * as crypto from 'crypto';
 
 /** Shape returned by GET /v1/certificates/:id/verify */
@@ -79,11 +80,9 @@ export class CertificatesService {
     } catch (err: unknown) {
       // ConflictException = already issued — treat as success
       if (err instanceof ConflictException) return;
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      const stack = err instanceof Error ? err.stack : undefined;
       this.logger.error(
-        `Auto-issuance failed for user=${payload.userId} course=${payload.courseId}: ${errorMessage}`,
-        stack,
+        `Auto-issuance failed for user=${payload.userId} course=${payload.courseId}: ${redactErrorMessage(err)}`,
+        redactStackTrace(err),
       );
     }
   }
@@ -177,16 +176,15 @@ export class CertificatesService {
         `Certificate minted on-chain — user=${userId} course=${courseId} tx=${txHash}`,
       );
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const stack = error instanceof Error ? error.stack : undefined;
+      const errorMessage = redactErrorMessage(error);
       this.logger.error(
         `On-chain certificate minting failed for user=${userId} course=${courseId}: ${errorMessage}`,
-        stack,
+        redactStackTrace(error),
       );
 
       // Roll back the pending row so we don't leave a ghost record
       await this.certificatesRepository.remove(certificate).catch((removeErr) =>
-        this.logger.error(`Failed to remove pending certificate: ${removeErr.message}`),
+        this.logger.error(`Failed to remove pending certificate: ${redactErrorMessage(removeErr)}`),
       );
 
       throw new InternalServerErrorException({
@@ -243,8 +241,7 @@ export class CertificatesService {
           };
         }
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        this.logger.warn(`Horizon lookup failed during verification: ${errorMessage}`);
+        this.logger.warn(`Horizon lookup failed during verification: ${redactErrorMessage(err)}`);
       }
     }
 
