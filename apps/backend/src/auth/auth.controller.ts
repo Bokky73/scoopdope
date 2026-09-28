@@ -100,6 +100,34 @@ export class AuthController {
     private userDeactivationService: UserDeactivationService,
   ) {}
 
+  /**
+   * Validates a redirect URI against the configured whitelist of allowed
+   * frontend origins. Prevents open-redirect attacks on the OAuth callback.
+   * Returns the whitelisted origin when valid, otherwise the safe default.
+   */
+  private resolveSafeRedirectUri(candidate?: string): string {
+    const defaultUrl = this.configService.get<string>('frontend.url');
+    const whitelist = this.configService.get<string[]>('frontend.allowedRedirectOrigins') ?? [];
+
+    if (!candidate) {
+      return defaultUrl;
+    }
+
+    try {
+      const parsed = new URL(candidate);
+      const isAllowed = whitelist.some((allowed) => {
+        try {
+          return new URL(allowed).origin === parsed.origin;
+        } catch {
+          return false;
+        }
+      });
+      return isAllowed ? parsed.origin : defaultUrl;
+    } catch {
+      return defaultUrl;
+    }
+  }
+
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Initiate Google OAuth login' })
@@ -113,11 +141,11 @@ export class AuthController {
   @Redirect()
   @ApiOperation({ summary: 'Google OAuth callback — issues JWT and redirects to frontend' })
   @ApiResponse({ status: 302, description: 'Redirects to frontend with tokens' })
-  async googleCallback(@Req() req: { user: GoogleProfile }) {
+  async googleCallback(@Req() req: { user: GoogleProfile }, @Query('redirect_uri') redirectUri?: string) {
     const tokens = await this.authService.googleOAuthLogin(req.user);
-    const frontendUrl = this.configService.get<string>('frontend.url');
+    const safeOrigin = this.resolveSafeRedirectUri(redirectUri);
     return {
-      url: `${frontendUrl}/auth/callback?access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token}`,
+      url: `${safeOrigin}/auth/callback?access_token=${tokens.access_token}&refresh_token=${tokens.refresh_token}`,
     };
   }
 
@@ -226,7 +254,6 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Validation error — invalid request body' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 429, description: 'Too many requests — rate limit exceeded' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
@@ -237,10 +264,8 @@ export class AuthController {
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiBody({ type: RefreshDto })
-  @ApiResponse({ status: 200, description: 'Returns a new access token' })
+  @ApiResponse({ status: 200, description: 'Returns new access token' })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
   refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto.refresh_token);
   }
@@ -248,11 +273,9 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Log out the current user' })
+  @ApiOperation({ summary: 'Logout and revoke refresh token' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
   logout(@Req() req: { user: { id: string } }) {
     return this.authService.logout(req.user.id);
   }
@@ -262,46 +285,47 @@ export class AuthController {
   @ApiOperation({ summary: 'Resend email verification link' })
   @ApiBody({ type: ResendVerificationDto })
   @ApiResponse({ status: 200, description: 'Verification email sent if account exists' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto.email);
   }
 
   @Post('forgot-password')
   @Throttle({ default: { limit: 3, ttl: 60000 } })
-  @ApiOperation({ summary: 'Request a password reset link' })
+  @ApiOperation({ summary: 'Request password reset link' })
   @ApiBody({ type: ForgotPasswordDto })
   @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
   @Post('reset-password')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @ApiOperation({ summary: 'Reset password using a reset token' })
+  @ApiOperation({ summary: 'Reset password using token' })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired reset token' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
   }
 
   @Post('deactivate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Deactivate the current user account' })
+  @ApiResponse({ status: 200, description: 'Account deactivated' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  deactivate(@Req() req: { user: { id: string } }) {
+    return this.userDeactivationService.deactivate(req.user.id);
+  }
+
+  @Post('admin/deactivate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Deactivate a user account (admin only)' })
   @ApiResponse({ status: 200, description: 'Account deactivated' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  deactivate(@Body('userId') userId: string) {
+  @ApiResponse({ status: 403, description: 'Forbidden — admin role required' })
+  adminDeactivate(@Body('userId') userId: string) {
     return this.userDeactivationService.deactivate(userId);
   }
 }
