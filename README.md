@@ -37,6 +37,7 @@ scoopdope/
 │   ├── api-rate-limiting.md
 │   ├── community-moderation.md
 │   ├── catastrophic-recovery.md
+│   ├── contract-upgrades.md
 │   └── kyc-verification.md
 ├── .github/workflows/     # CI/CD pipelines
 ├── Cargo.toml             # Rust workspace
@@ -92,6 +93,7 @@ scoopdope/
 - **Analytics Contract** — Records per-student, per-course progress percentages on-chain
 - **Token Contract** — Mints reward tokens to students upon verified course completion
 - **Shared Contract** — Provides RBAC, reentrancy guards, and common validation utilities
+- **Upgradeable Contracts** — Admin-authorized WASM replacement via the shared upgrade mechanism
 
 ### API
 - RESTful endpoints for auth, courses, users, and Stellar interactions
@@ -212,6 +214,56 @@ Requires `STELLAR_SECRET_KEY` set in your environment.
 
 ---
 
+## Smart Contract Upgrades
+
+Soroban contracts in this monorepo are upgradeable. Each contract stores its own
+WASM hash and exposes an admin-gated `upgrade` entry point, so a new contract
+version can be rolled out on-chain without changing the contract address or
+losing stored state.
+
+### Upgrade mechanism
+
+- The contract admin (set at initialization) is the only account authorized to
+  call `upgrade`.
+- `upgrade(new_wasm_hash)` verifies the caller is the admin, then replaces the
+  contract's executable with the referenced WASM while preserving all ledger
+  storage (balances, progress records, RBAC roles, etc.).
+- The new WASM must already be installed on the network before the upgrade call.
+
+### Upgrade procedure
+
+```bash
+# 1. Build the new contract version
+./scripts/build.sh
+
+# 2. Install the new WASM on the target network and capture its hash
+stellar contract install \
+  --network testnet \
+  --source $STELLAR_SECRET_KEY \
+  --wasm target/wasm32-unknown-unknown/release/analytics.wasm
+
+# 3. Invoke the admin-gated upgrade entry point with the new WASM hash
+stellar contract invoke \
+  --network testnet \
+  --source $STELLAR_SECRET_KEY \
+  --id <CONTRACT_ID> \
+  -- upgrade \
+  --new_wasm_hash <NEW_WASM_HASH>
+```
+
+### Upgrade checklist
+
+1. Run the contract test suite (`cargo test`) against the new version.
+2. Install the new WASM and record its hash.
+3. Announce the upgrade window to maintainers/operators.
+4. Execute `upgrade` from the admin account.
+5. Verify state is intact and the new entry points behave as expected.
+
+See [`docs/contract-upgrades.md`](./docs/contract-upgrades.md) for the full
+procedure, rollback guidance, and storage-compatibility rules.
+
+---
+
 ## Environment Variables
 
 See `.env.example` for the full list. Key variables:
@@ -274,27 +326,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributing guide, includ
 
 Quick summary:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) messages
-4. Ensure all CI checks pass
-5. Open a pull request with a detailed description
+1. Fork the reposi
 
----
-
-## Stellar & Soroban Resources
-
-- [Stellar Documentation](https://developers.stellar.org)
-- [Soroban Smart Contracts](https://soroban.stellar.org)
-- [Stellar Laboratory](https://laboratory.stellar.org)
-- [Stellar Discord](https://discord.gg/stellardev)
-
----
-
-## License
-
-MIT — see [LICENSE](./LICENSE) for details.
-
----
-
-*Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
+/* … truncated 682 chars — edit only what you need near the top … */
