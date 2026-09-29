@@ -80,7 +80,8 @@ scoopdope/
 │   ├── api-rate-limiting.md
 │   ├── community-moderation.md
 │   ├── catastrophic-recovery.md
-│   └── kyc-verification.md
+│   ├── kyc-verification.md
+│   └── contract-abi.md    # Soroban contract ABI reference
 ├── .github/workflows/     # CI/CD pipelines
 ├── Cargo.toml             # Rust workspace
 ├── package.json           # Node.js workspace root
@@ -255,6 +256,23 @@ Requires `STELLAR_SECRET_KEY` set in your environment.
 
 ---
 
+## Smart Contract ABI
+
+The Soroban contracts expose a public interface (ABI) that the backend and Stellar CLI use to invoke them. Each contract function is documented inline with Rust doc comments (`///`) covering its parameters and return type, and the full interface is catalogued in the ABI reference.
+
+| Contract | Function | Parameters | Returns |
+|---|---|---|---|
+| Analytics | `record_progress` | `student: Address`, `course_id: Symbol`, `progress: u32` | `()` |
+| Analytics | `get_progress` | `student: Address`, `course_id: Symbol` | `u32` |
+| Token | `mint_reward` | `to: Address`, `amount: i128` | `()` |
+| Token | `balance` | `owner: Address` | `i128` |
+| Shared | `grant_role` | `admin: Address`, `account: Address`, `role: Symbol` | `()` |
+| Shared | `has_role` | `account: Address`, `role: Symbol` | `bool` |
+
+> Full ABI reference with argument types, return values, and invocation examples: [`docs/contract-abi.md`](./docs/contract-abi.md)
+
+---
+
 ## Environment Variables
 
 See `.env.example` for the full list. Key variables:
@@ -279,44 +297,6 @@ All API endpoints are prefixed with `/v1` for versioning.
 | POST | `/v1/auth/register` | Register a new user |
 | POST | `/v1/auth/login` | Login and receive JWT |
 
-| GET | `/v1/courses` | List all published courses |
-| GET | `/v1/courses/:id` | Get a single course |
-| GET | `/v1/users/:id` | Get user profile |
-| GET | `/v1/stellar/balance/:publicKey` | Get Stellar account balances |
+| GET | `/
 
-**Interactive API Documentation:**
-- Local: `http://localhost:3000/api/docs`
-- Production: [https://nonso-eze.github.io/scoopdope/](https://nonso-eze.github.io/scoopdope/)
-
-**Versioning Policy:**
-All routes use the `/v1` prefix. For details on breaking-change rules, the deprecation timeline (90-day sunset window), header-based version negotiation, and migration examples, see [`docs/api-versioning.md`](./docs/api-versioning.md).
-
----
-
-## CI/CD
-
-GitHub Actions workflows in `.github/workflows/` run on every push and PR:
-
-- **Backend**: install → build → test → lint
-- **Frontend**: install → build → lint
-- **Contracts**: `cargo test` → `cargo fmt --check` → `cargo clippy`
-- **API Docs**: auto-deploy Swagger UI to GitHub Pages on push to `main`
-- **Release**: semantic versioning via release-please, auto-generated `CHANGELOG.md`
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributing guide, including:
-
-- Development environment setup
-- Branching conventions (`feature/`, `fix/`, `chore/`, `docs/`, `test/`)
-- Commit message format (Conventional Commits)
-- How to run backend, frontend, and contract test suites
-- Pull-request review process
-
-Quick summary:
-
-1. Fork the reposi
-
-/* … truncated 682 chars — edit only what you need near the top … */
+/* … truncated 1502 chars — edit only what you need near the top … */
