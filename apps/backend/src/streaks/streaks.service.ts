@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { User } from '../users/user.entity';
 import { StellarService } from '../stellar/stellar.service';
+import { redactErrorMessage } from '../common/utils/log-redactor';
 
 @Injectable()
 export class StreaksService {
@@ -77,9 +78,8 @@ export class StreaksService {
         );
         await this.stellarService.mintReward(user.stellarPublicKey, milestone.reward);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         this.logger.error(
-          `Failed to mint streak reward for user ${user.id}: ${message}`
+          `Failed to mint streak reward for user ${user.id}: ${redactErrorMessage(error)}`
         );
       }
     }

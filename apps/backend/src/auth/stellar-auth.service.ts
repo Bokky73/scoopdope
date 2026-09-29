@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Keypair, Networks, WebAuth } from '@stellar/stellar-sdk';
 import { UsersService } from '../users/users.service';
+import { redactErrorMessage } from '../common/utils/log-redactor';
 
 const CHALLENGE_TTL_SECONDS = 300; // 5 minutes
 
@@ -51,8 +52,11 @@ export class StellarAuthService {
       );
       clientPublicKey = clientAccountID;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new UnauthorizedException(`Invalid SEP-0010 challenge: ${message}`);
+      // The XDR decoder echoes the offending envelope, which can contain the
+      // signing keypair — scrub before it reaches the client or a log sink.
+      throw new UnauthorizedException(
+        `Invalid SEP-0010 challenge: ${redactErrorMessage(err)}`
+      );
     }
 
     // Find or auto-provision a user for this Stellar account
