@@ -228,6 +228,16 @@ export class CoursesService {
   async delete(id: string) {
     const course = await this.findOne(id);
     if (!course) throw new NotFoundException('Course not found');
+
+    // Cascade delete lessons associated with this course so no orphaned
+    // lesson records remain after the course is removed.
+    await this.repo.manager
+      .createQueryBuilder()
+      .delete()
+      .from('lessons')
+      .where('"courseId" = :id', { id })
+      .execute();
+
     const removed = await this.repo.remove(course);
     await this.invalidateCache();
     await this.searchService.deleteFromIndex('courses', id).catch(() => {});
@@ -235,7 +245,6 @@ export class CoursesService {
   }
 
   private async invalidateCache() {
-    await this.cacheManager.del(this.CACHE_KEY);
-    // C
-
-/* … truncated 5609 chars — edit only what you need near the top … */
+    await this.cacheManager.del(this.CACHE_KEY).catch(() => {});
+  }
+}
