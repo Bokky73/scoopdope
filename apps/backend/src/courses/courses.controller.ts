@@ -36,6 +36,19 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/audit-log.entity';
 import { CourseStatus } from './course.entity';
 
+/** Allowed MIME types for course thumbnails */
+const THUMBNAIL_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+]);
+
+/** 2 MB in bytes */
+const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
+
 @ApiTags('courses')
 @Controller('v1/courses')
 export class CoursesController {

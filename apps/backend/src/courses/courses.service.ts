@@ -68,6 +68,7 @@ export class CoursesService {
     const { search, level, category, language, page = 1, limit = 20 } = query;
 
     // Cache key encodes all filter params; skip cache for search queries
+    const tagsKey = tags?.length ? tags.sort().join(',') : '';
     const cacheKey = !search
       ? `courses:catalog:${level ?? ''}:${category ?? ''}:${language ?? ''}:${page}:${limit}`
       : null;
