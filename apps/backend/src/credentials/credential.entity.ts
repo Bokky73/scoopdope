@@ -60,6 +60,9 @@ export class Credential {
   @Column({ nullable: true })
   onChainId: string;
 
+  @Column({ nullable: true, type: 'timestamp' })
+  expiresAt: Date | null;
+
   @CreateDateColumn()
   issuedAt: Date;
 }

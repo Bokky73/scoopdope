@@ -11,9 +11,11 @@ import {
   UseGuards,
   Header,
   Request,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { CoursesService } from './courses.service';
 import {
   ApiTags,
@@ -50,7 +52,10 @@ const THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024;
 @ApiTags('courses')
 @Controller('v1/courses')
 export class CoursesController {
-  constructor(private coursesService: CoursesService) {}
+  constructor(
+    private coursesService: CoursesService,
+    private auditService: AuditService,
+  ) {}
 
   @Get()
   @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
@@ -131,8 +136,23 @@ export class CoursesController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiResponse({
     status: 200,
-    description: 'Returns a single course',
-    schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
+    description: 'Returns a single course including instructor profile details',
+    schema: {
+      example: {
+        data: {
+          id: 'uuid',
+          title: 'Intro to Stellar',
+          instructor: {
+            id: 'uuid',
+            name: 'Jane Doe',
+            avatarUrl: 'https://example.com/avatar.png',
+            bio: 'Blockchain educator',
+          },
+        },
+        statusCode: 200,
+        timestamp: '2024-01-01T00:00:00.000Z',
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -170,8 +190,89 @@ export class CoursesController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  create(@Body() data: any) {
-    return this.coursesService.create(data);
+  async create(
+    @Body() data: any,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    const course = await this.coursesService.create(data);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_CREATE,
+      entityType: 'course',
+      entityId: course?.id,
+      metadata: { title: course?.title },
+    });
+    return course;
+  }
+
+  @Post('import')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Bulk import courses from a CSV file' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Import summary with created and failed rows',
+    schema: {
+      example: {
+        created: 2,
+        failed: 1,
+        errors: [{ row: 3, message: 'title is required' }],
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Missing or invalid CSV file' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin only' })
+  async importCsv(@UploadedFile() file?: { buffer: Buffer; originalname?: string }) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('CSV file is required');
+    }
+
+    const rows = parseCsv(file.buffer.toString('utf-8'));
+    if (rows.length === 0) {
+      throw new BadRequestException('CSV file contains no data rows');
+    }
+
+    const created: any[] = [];
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNumber = i + 2; // account for header row
+      const row = rows[i];
+      const title = (row.title ?? '').trim();
+      if (!title) {
+        errors.push({ row: rowNumber, message: 'title is required' });
+        continue;
+      }
+      try {
+        const course = await this.coursesService.create({
+          title,
+          description: row.description?.trim() || undefined,
+          level: row.level?.trim() || undefined,
+          category: row.category?.trim() || undefined,
+          language: row.language?.trim() || undefined,
+        });
+        created.push(course);
+      } catch (err) {
+        errors.push({
+          row: rowNumber,
+          message: err instanceof Error ? err.message : 'Failed to create course',
+        });
+      }
+    }
+
+    return { created: created.length, failed: errors.length, errors };
   }
 
   @Patch(':id')
@@ -181,18 +282,28 @@ export class CoursesController {
   @ApiOperation({ summary: 'Update a course' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiBody({ schema: { example: { title: 'Updated title', description: 'Updated description' } } })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
   @ApiResponse({
     status: 200,
     description: 'Course updated successfully',
     schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.coursesService.update(id, data);
+  async update(
+    @Param('id') id: string,
+    @Body() data: any,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    const course = await this.coursesService.update(id, data);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_UPDATE,
+      entityType: 'course',
+      entityId: id,
+      metadata: { changes: data },
+    });
+    return course;
   }
 
   @Delete(':id')
@@ -200,328 +311,75 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a course' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
   @ApiResponse({
     status: 200,
     description: 'Course deleted successfully',
     schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  delete(@Param('id') id: string) {
-    return this.coursesService.delete(id);
-  }
-
-  @Post(':id/schedule')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Schedule a course for future publication' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiBody({ type: ScheduleCourseDto })
-  @ApiResponse({ status: 200, description: 'Course scheduled' })
-  @ApiResponse({ status: 400, description: 'scheduledAt must be in the future' })
-  schedule(@Param('id') id: string, @Body() dto: ScheduleCourseDto) {
-    const scheduledAt = resolveScheduledAt(dto.scheduledAt, dto.timezone);
-    return this.coursesService.scheduleCourse(id, scheduledAt);
-  }
-
-  @Post(':id/publish')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Immediately publish a course' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiResponse({ status: 200, description: 'Course published' })
-  publishNow(@Param('id') id: string) {
-    return this.coursesService.publishNow(id);
-  }
-
-  @Put(':id/publish')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Submit a draft course for admin review (DRAFT -> PENDING_REVIEW)',
-  })
-  @ApiResponse({ status: 200, description: 'Course moved to PENDING_REVIEW' })
-  @ApiResponse({
-    status: 400,
-    description: 'Course is not a draft, or is missing title/description/modules',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not the course owner' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  submitForReview(
+  async remove(
     @Param('id') id: string,
-    @Request() req: { user: { id: string; role: string } },
+    @Request() req: { user?: { id: string; role: string } },
   ) {
-    return this.coursesService.submitForReview(id, req.user);
-  }
-
-  @Put(':id/approve')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Approve a course pending review and publish it (PENDING_REVIEW -> PUBLISHED)',
-  })
-  @ApiResponse({ status: 200, description: 'Course published' })
-  @ApiResponse({
-    status: 400,
-    description: 'Course is not pending review, or is missing title/description/modules',
-  })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  approve(@Param('id') id: string) {
-    return this.coursesService.approveCourse(id);
-  }
-
-  @Put(':id/archive')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Archive a published course (PUBLISHED -> ARCHIVED)' })
-  @ApiResponse({ status: 200, description: 'Course archived' })
-  @ApiResponse({ status: 400, description: 'Course is not currently published' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not the course owner' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  archive(
-    @Param('id') id: string,
-    @Request() req: { user: { id: string; role: string } },
-  ) {
-    return this.coursesService.archiveCourse(id, req.user);
-  }
-}
-
-/**
- * Converts an ISO datetime string to a UTC Date, optionally interpreting it
- * in the given IANA timezone (e.g. "America/New_York").
- *
- * If the input already carries a UTC offset (e.g. "2026-05-01T10:00:00-05:00")
- * the timezone parameter is ignored — the offset in the string takes precedence.
- */
-function resolveScheduledAt(isoString: string, timezone?: string): Date {
-  // If the string already has an explicit offset, parse it directly.
-  if (/[+-]\d{2}:\d{2}$|Z$/.test(isoString)) {
-    return new Date(isoString);
-  }
-
-  if (!timezone) {
-    return new Date(isoString);
-  }
-
-  // Use Intl to find the UTC offset for the given timezone at the requested moment.
-  const naive = new Date(isoString);
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-
-  // Re-parse the formatted local time back to UTC via the offset trick.
-  const parts = formatter.formatToParts(naive);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  const localDate = new Date(
-    Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')),
-  );
-  const offsetMs = localDate.getTime() - naive.getTime();
-  return new Date(naive.getTime() - offsetMs);
-}
-
-/**
- * Admin-only course management controller.
- * Handles listing all courses (regardless of status), approval, archive/unarchive, and deletion.
- */
-@ApiTags('admin')
-@ApiBearerAuth()
-@Controller('admin/courses')
-@UseGuards(JwtAuthGuard, RolesGuard)
-export class AdminCoursesController {
-  constructor(
-    private readonly coursesService: CoursesService,
-    private readonly auditService: AuditService,
-  ) {}
-
-  @Get()
-  @Roles('admin')
-  @ApiOperation({ summary: 'List all courses (admin — all statuses, with filters)' })
-  @ApiResponse({ status: 200, description: 'Paginated list of courses' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiQuery({ name: 'status', required: false, enum: CourseStatus })
-  @ApiQuery({ name: 'instructorId', required: false })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  findAllAdmin(
-    @Query('status') status?: string,
-    @Query('instructorId') instructorId?: string,
-    @Query('search') search?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.coursesService.findAllAdmin({
-      status: status as CourseStatus | undefined,
-      instructorId,
-      search,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 20,
+    const result = await this.coursesService.remove(id);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_DELETE,
+      entityType: 'course',
+      entityId: id,
     });
-  }
-
-  @Post(':id/approve')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Approve a pending course (publishes it)' })
-  @ApiResponse({ status: 200, description: 'Course approved and published' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  async approveCourse(
-    @Param('id') id: string,
-    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
-  ) {
-    const course = await this.coursesService.approveCourse(id);
-
-    await this.auditService.log(
-      AuditAction.COURSE_APPROVED,
-      req.user.id,
-      true,
-      {
-        resourceType: 'course',
-        resourceId: id,
-        changes: { status: { from: CourseStatus.PENDING, to: CourseStatus.PUBLISHED } },
-        metadata: { courseTitle: course.title },
-        ipAddress: req.ip,
-        userAgent: req.headers?.['user-agent'],
-      },
-    );
-
-    return course;
-  }
-
-  @Post(':id/archive')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Archive a course' })
-  @ApiResponse({ status: 200, description: 'Course archived' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  async archiveCourse(
-    @Param('id') id: string,
-    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
-  ) {
-    const { course, previousStatus } = await this.coursesService.archiveCourse(id);
-
-    await this.auditService.log(
-      AuditAction.COURSE_ARCHIVED,
-      req.user.id,
-      true,
-      {
-        resourceType: 'course',
-        resourceId: id,
-        changes: { status: { from: previousStatus, to: CourseStatus.ARCHIVED } },
-        metadata: { courseTitle: course.title },
-        ipAddress: req.ip,
-        userAgent: req.headers?.['user-agent'],
-      },
-    );
-
-    return course;
-  }
-
-  @Post(':id/unarchive')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Unarchive a course (restores to published)' })
-  @ApiResponse({ status: 200, description: 'Course unarchived' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  async unarchiveCourse(
-    @Param('id') id: string,
-    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
-  ) {
-    const course = await this.coursesService.unarchiveCourse(id);
-
-    await this.auditService.log(
-      AuditAction.COURSE_UNARCHIVED,
-      req.user.id,
-      true,
-      {
-        resourceType: 'course',
-        resourceId: id,
-        changes: { status: { from: CourseStatus.ARCHIVED, to: CourseStatus.PUBLISHED } },
-        metadata: { courseTitle: course.title },
-        ipAddress: req.ip,
-        userAgent: req.headers?.['user-agent'],
-      },
-    );
-
-    return course;
-  }
-
-  @Delete(':id')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Permanently delete a course (admin only)' })
-  @ApiResponse({ status: 200, description: 'Course deleted' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  async deleteCourse(
-    @Param('id') id: string,
-    @Req() req: { user: { id: string }; ip: string; headers: Record<string, string> },
-  ) {
-    const course = await this.coursesService.findOneAdmin(id);
-    const result = await this.coursesService.delete(id);
-
-    await this.auditService.log(
-      AuditAction.COURSE_DELETED,
-      req.user.id,
-      true,
-      {
-        resourceType: 'course',
-        resourceId: id,
-        metadata: { courseTitle: course.title },
-        ipAddress: req.ip,
-        userAgent: req.headers?.['user-agent'],
-      },
-    );
-
     return result;
   }
+}
+
+function parseCsv(content: string): Record<string, string>[] {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const headers = splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const rows: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = splitCsvLine(lines[i]);
+    const row: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] ?? '';
+    });
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
 }
