@@ -301,5 +301,7 @@ MIT — see [LICENSE](./LICENSE) for details.
 
 ## Handsoff notes
 
-<!-- handsoff-issue-993 -->
-- #993: Add course certificate generation
+<!-- handsoff-issue-1009 -->
+- #1009: Nested resource URLs are inconsistent
+<!-- handsoff-issue-984 -->
+- #984: Course completion percentage calculation is incorrect
