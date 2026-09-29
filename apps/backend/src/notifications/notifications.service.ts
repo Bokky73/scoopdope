@@ -154,6 +154,36 @@ export class NotificationsService {
   }
 
   /**
+   * Notify all enrolled students in a course using a single bulk insert
+   * instead of N individual inserts.
+   */
+  async notifyCourseStudents(
+    userIds: string[],
+    type: NotificationType,
+    message: string,
+    title?: string,
+  ): Promise<Notification[]> {
+    if (userIds.length === 0) return [];
+
+    const notifications = this.repo.create(
+      userIds.map((userId) => ({
+        userId,
+        type,
+        message,
+        title: title ?? null,
+      })),
+    );
+    const saved = await this.repo.save(notifications);
+
+    // Emit via WebSocket to online users
+    for (const n of saved) {
+      this.gateway.emitToUser(n.userId, 'notification', n);
+    }
+
+    return saved;
+  }
+
+  /**
    * Returns paginated notifications for a user.
    * Defaults to the last 20 (notification center view); supports full history via page.
    */
