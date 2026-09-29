@@ -308,3 +308,6 @@ MIT — see [LICENSE](./LICENSE) for details.
 
 <!-- handsoff-issue-975 -->
 - #975: BST rewards not rolled back on course unenrollment
+
+<!-- handsoff-issue-977 -->
+- #977: Wallet creation does not store public key in DB
