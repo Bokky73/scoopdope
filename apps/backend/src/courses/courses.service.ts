@@ -207,7 +207,6 @@ export class CoursesService {
       }
 
   private async invalidateCache() {
-    await this.cacheManager.del(this.CACHE_KEY);
-    // C
-
-/* … truncated 5609 chars — edit only what you need near the top … */
+    await this.cacheManager.del(this.CACHE_KEY).catch(() => {});
+  }
+}

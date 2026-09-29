@@ -305,3 +305,9 @@ MIT — see [LICENSE](./LICENSE) for details.
 - #1009: Nested resource URLs are inconsistent
 <!-- handsoff-issue-984 -->
 - #984: Course completion percentage calculation is incorrect
+
+<!-- handsoff-issue-975 -->
+- #975: BST rewards not rolled back on course unenrollment
+
+<!-- handsoff-issue-977 -->
+- #977: Wallet creation does not store public key in DB

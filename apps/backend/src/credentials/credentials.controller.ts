@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -127,5 +128,51 @@ export class CredentialsController {
   @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
   issue(@Body() body: { userId: string; courseId: string; stellarPublicKey: string }) {
     return this.credentialsService.issue(body.userId, body.courseId, body.stellarPublicKey);
+  }
+
+  @Post('issue/batch')
+  @UseGuards(AuthGuard(['jwt', 'api-key']), RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: 'Admin: issue multiple credentials in a single transaction' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiBody({
+    schema: {
+      example: {
+        credentials: [
+          { userId: 'uuid', courseId: 'uuid', stellarPublicKey: 'GABC...' },
+          { userId: 'uuid', courseId: 'uuid', stellarPublicKey: 'GDEF...' },
+        ],
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Credentials issued',
+    schema: { example: { issued: [{ id: 'uuid', txHash: 'abc123' }] } },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin role required' })
+  async issueBatch(
+    @Body()
+    body: {
+      credentials: { userId: string; courseId: string; stellarPublicKey: string }[];
+    }
+  ) {
+    const items = body?.credentials;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('credentials must be a non-empty array');
+    }
+    for (const [index, item] of items.entries()) {
+      if (!item?.userId || !item?.courseId || !item?.stellarPublicKey) {
+        throw new BadRequestException(
+          `credentials[${index}] must include userId, courseId and stellarPublicKey`
+        );
+      }
+    }
+    const issued = await this.credentialsService.issueBatch(items);
+    return { issued };
   }
 }
