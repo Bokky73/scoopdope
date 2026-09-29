@@ -1,30 +1,31 @@
 import { z } from 'zod';
 
-const isTest = process.env.NODE_ENV === 'test';
-
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3000),
+
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url().optional(),
-  JWT_SECRET: z.string().min(1),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // Database connection pool settings
+  DB_POOL_MIN: z.coerce.number().int().min(0).default(2),
+  DB_POOL_MAX: z.coerce.number().int().min(1).default(10),
+  DB_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
+  DB_POOL_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5000),
 });
 
-// Test runs must not inherit development/production configuration.
-// Load test-specific values from .env.test (or the test process env) so that
-// config does not bleed between environments.
-if (isTest) {
-  const { config: loadDotenv } = require('dotenv');
-  loadDotenv({ path: '.env.test', override: true });
-}
-
-const parsed = envSchema.safeParse(process.env);
-
-if (!parsed.success) {
-  console.error('Invalid environment variables:', parsed.error.flatten().fieldErrors);
-  throw new Error('Invalid environment variables');
-}
-
-export const env = parsed.data;
 export type Env = z.infer<typeof envSchema>;
+
+function loadEnv(): Env {
+  const parsed = envSchema.safeParse(process.env);
+
+  if (!parsed.success) {
+    const errors = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n');
+    throw new Error(`Invalid environment configuration:\n${errors}`);
+  }
+
+  return parsed.data;
+}
+
+export const env = loadEnv();

@@ -1,6 +1,7 @@
 import './tracing';
 import './instrument';
 import * as compression from 'compression';
+import * as express from 'express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -25,6 +26,9 @@ import {
   LATEST_API_VERSION,
   getVersionInfo,
 } from './common/versioning';
+
+// #1008: Global request body size limit (1MB).
+const BODY_SIZE_LIMIT = '1mb';
 
 async function runMigrationCommand(command: string) {
   const logger = new Logger('MigrationCommand');
@@ -76,6 +80,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableShutdownHooks();
 
+  // #1008: Reject request bodies larger than the global limit with 413.
+  app.use(express.json({ limit: BODY_SIZE_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: BODY_SIZE_LIMIT }));
+
   // #882: Enable gzip compression for responses >1KB
   app.use(
     compression({
@@ -102,8 +110,29 @@ async function bootstrap() {
   app.use((req, res, next) => correlationId.use(req, res, next));
   app.use((req, res, next) => requestValidation.use(req, res, next));
 
+  // #1007: Lightweight, unauthenticated health check for load balancers and
+  // uptime monitors. Registered before global pipes/filters/interceptors so it
+  // stays fast and returns a plain 200 without extra processing.
+  app.getHttpAdapter().get('/health', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
   app.setGlobalPrefix('v1', { exclude: ['health', 'health/live', 'health/ready', 'health/startup', 'health/environment', 'health/version'] });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }), new SanitizationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      // Strip properties not declared in the DTO
+      whitelist: true,
+      // Reject requests that contain extra properties not in the DTO
+      forbidNonWhitelisted: true,
+      // Auto-transform plain objects to DTO class instances and coerce
+      // primitive query/path params to their declared types (e.g. "1" → 1)
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+      // Return all constraint violations at once instead of stopping at first
+      stopAtFirstError: false,
+    }),
+    new SanitizationPipe(),
+  );
   app.useGlobalFilters(new HttpExceptionFilter(), new ValidationExceptionFilter());
   app.useGlobalInterceptors(
     new TransformInterceptor(),
@@ -148,22 +177,22 @@ async function bootstrap() {
         '## Authentication\n\n' +
         'This API uses JWT Bearer tokens for authentication.\n\n' +
         '### Getting Started\n\n' +
-        '1. **Register**: POST /v1/auth/register with email and password\n' +
-        '2. **Login**: POST /v1/auth/login to receive access_token\n' +
+        '1. **Register**: POST /api/v1/auth/register with email and password\n' +
+        '2. **Login**: POST /api/v1/auth/login to receive access_token\n' +
         '3. **Authorize**: Click "Authorize" button and enter: `Bearer <access_token>`\n' +
         '4. **Use API**: All protected endpoints now accessible\n\n' +
         '### Example Flow\n\n' +
         '```bash\n' +
         '# Register\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/register \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/register \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Login\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/login \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/login \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Use token in subsequent requests\n' +
-        'curl -X GET https://api.scoopdope.com/v1/courses \\\n' +
+        'curl -X GET https://api.scoopdope.com/api/v1/courses \\\n' +
         '  -H "Authorization: Bearer <your_access_token>"\n' +
         '```'
     )
@@ -176,22 +205,20 @@ async function bootstrap() {
     })
     .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-KEY' }, 'X-API-KEY')
     .addServer(`/${LATEST_API_VERSION}`, `API ${LATEST_API_VERSION} (latest)`)
-    .addServer(`/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION} (default)`)
+    .addServer(`/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION}`)
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    jsonDocumentUrl: 'api-json',
-  });
+  SwaggerModule.setup('api/docs', app, document);
 
-  if (process.env.EXPORT_OPENAPI === 'true' || process.argv.includes('--export-openapi')) {
-    const outputPath = join(__dirname, '..', 'openapi.json');
-    writeFileSync(outputPath, JSON.stringify(document, null, 2));
-    logger.log(`OpenAPI spec exported to ${outputPath}`);
-    process.exit(0);
-  }
+  writeFileSync(
+    join(process.cwd(), 'openapi.json'),
+    JSON.stringify(document, null, 2),
+  );
 
-  await app.listen(port ?? 3000);
-  logger.log(`scoopdope API running on port ${port} [${nodeEnv}]`);
+  await app.listen(port);
+  logger.log(`Application is running on port ${port}`);
+  logger.log(`API version: ${v1Info.version} (${v1Info.status})`);
 }
+
 bootstrap();
