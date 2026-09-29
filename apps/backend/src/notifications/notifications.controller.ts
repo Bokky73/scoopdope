@@ -79,8 +79,11 @@ export class NotificationsController {
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Results per page, max 100 (default: 20)' })
   @ApiResponse({ status: 200, description: 'Returns paginated user notifications with unread count' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  findAll(@Request() req: { user: { id: string } }) {
-    return this.notificationsService.findByUser(req.user.id);
+  findAll(
+    @Request() req: { user: { id: string } },
+    @Query() query: NotificationQueryDto,
+  ) {
+    return this.notificationsService.findByUser(req.user.id, query.page, query.limit);
   }
 
   /**
@@ -91,7 +94,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get unread notification count for the current user' })
   @ApiResponse({ status: 200, description: 'Returns the unread notification count', schema: { example: { count: 3 } } })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  getUnreadCount(@Request() req) {
+  getUnreadCount(@Request() req: { user: { id: string } }) {
     return this.notificationsService.getUnreadCount(req.user.id);
   }
 
@@ -105,7 +108,7 @@ export class NotificationsController {
   @ApiResponse({ status: 201, description: 'Notification(s) created' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden — admin only' })
-  createSystemNotification(@Request() req, @Body() dto: CreateSystemNotificationDto) {
+  createSystemNotification(@Request() req: { user: { id: string } }, @Body() dto: CreateSystemNotificationDto) {
     return this.notificationsService.createSystemNotification(req.user.id, dto);
   }
 
@@ -118,7 +121,7 @@ export class NotificationsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
-  markAsRead(@Param('id') id: string, @Request() req) {
+  markAsRead(@Param('id') id: string, @Request() req: { user: { id: string } }) {
     return this.notificationsService.markAsRead(id, req.user.id);
   }
 

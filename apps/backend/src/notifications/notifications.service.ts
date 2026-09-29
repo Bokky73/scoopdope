@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Notification, NotificationType } from './notification.entity';
 import { PushSubscription } from './push-subscription.entity';
 import { NotificationsGateway } from './notifications.gateway';
-import { User } from '../users/user.entity';
+import { User, UserRole } from '../users/user.entity';
 import { PushNotificationsService } from './push-notifications.service';
 
 const NOTIFICATION_CENTER_LIMIT = 20;
@@ -31,8 +31,9 @@ export class NotificationsService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    user.notificationPreferences = {
-      ...user.notificationPreferences,
+    const current = (user as any).notificationPreferences ?? {};
+    (user as any).notificationPreferences = {
+      ...current,
       ...preferences,
     };
 
@@ -57,9 +58,9 @@ export class NotificationsService {
 
     // Send push notification if enabled
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (user && user.notificationPreferences?.pushEnabled) {
+    if (user && (user as any).notificationPreferences?.pushEnabled) {
       let shouldSendPush = false;
-      const prefs = user.notificationPreferences;
+      const prefs = (user as any).notificationPreferences;
 
       switch (type) {
         case NotificationType.ENROLLMENT:
@@ -107,7 +108,7 @@ export class NotificationsService {
   ): Promise<Notification | Notification[]> {
     // Validate the requesting user is an admin
     const admin = await this.userRepo.findOne({ where: { id: adminUserId } });
-    if (!admin || admin.role !== 'admin') {
+    if (!admin || admin.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Only admins can create system notifications');
     }
 
@@ -116,14 +117,14 @@ export class NotificationsService {
       return this.create(payload.userId, payload.type, payload.message, payload.title);
     }
 
-    // Broadcast to all non-deleted users in batches
+    // Broadcast to all non-banned users in batches
     const batchSize = 200;
     let offset = 0;
     const results: Notification[] = [];
 
     while (true) {
       const users = await this.userRepo.find({
-        where: { isBanned: false },
+        where: { ...(({ isBanned: false } as any)) },
         select: ['id'],
         skip: offset,
         take: batchSize,
