@@ -100,7 +100,11 @@ scoopdope/
 
 ---
 
-## Prerequisites
+## Getting Started
+
+Follow these steps to run scoopdope locally.
+
+### Prerequisites
 
 | Tool | Version |
 |---|---|
@@ -110,10 +114,6 @@ scoopdope/
 | Rust | v1.75 or higher |
 | Stellar CLI | v21.5.0 |
 | Docker | Optional (for local Stellar testnet) |
-
----
-
-## Quick Start
 
 ### 1. Clone the repository
 
@@ -274,28 +274,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributing guide, includ
 
 Quick summary:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) messages
-4. Ensure all CI checks pass
-5. Open a pull request with a detailed description
-
----
-
-## Stellar & Soroban Resources
-
-- [Stellar Documentation](https://developers.stellar.org)
-- [Soroban Smart Contracts](https://soroban.stellar.org)
-- [Stellar Laboratory](https://laboratory.stellar.org)
-- [Stellar Discord](https://discord.gg/stellardev)
-
----
-
-## License
-
-MIT — see [LICENSE](./LICENSE) for details.
-
----
+1. Fork the reposi
 
 *Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
 
