@@ -18,9 +18,19 @@ import { CourseStatus } from '../courses/course.entity';
 import { MetricsService } from '../metrics/metrics.service';
 import { StellarService } from '../stellar/stellar.service';
 
+/** TTL for cached enrollment counts, in milliseconds. */
+const ENROLLMENT_COUNT_TTL_MS = 60_000;
+
+interface CachedCount {
+  value: number;
+  expiresAt: number;
+}
+
 @Injectable()
 export class EnrollmentsService {
   private readonly logger = new Logger(EnrollmentsService.name);
+
+  private readonly enrollmentCountCache = new Map<string, CachedCount>();
 
   constructor(
     @InjectRepository(Enrollment)
@@ -88,6 +98,9 @@ export class EnrollmentsService {
       });
     }
 
+    // Invalidate the cached count so the new enrollment is reflected immediately.
+    this.enrollmentCountCache.delete(courseId);
+
     // Emit legacy event consumed by notifications / other listeners.
     this.eventEmitter.emit('enrollment.created', {
       enrollmentId: enrollment.id,
@@ -114,10 +127,23 @@ export class EnrollmentsService {
   }
 
   /**
-   * Count total enrollments for a course
+   * Count total enrollments for a course.
+   *
+   * Results are cached for a short TTL so repeated calls within the window
+   * do not hit the database.
    */
   async countByCoursId(courseId: string): Promise<number> {
-    return this.repo.count({ where: { courseId } });
+    const cached = this.enrollmentCountCache.get(courseId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const value = await this.repo.count({ where: { courseId } });
+    this.enrollmentCountCache.set(courseId, {
+      value,
+      expiresAt: Date.now() + ENROLLMENT_COUNT_TTL_MS,
+    });
+    return value;
   }
 
   /**
@@ -135,6 +161,9 @@ export class EnrollmentsService {
     const enrollment = await this.repo.findOne({ where: { userId, courseId } });
     if (!enrollment) throw new NotFoundException('Enrollment not found');
     await this.repo.remove(enrollment);
+
+    // Invalidate the cached count so the removal is reflected immediately.
+    this.enrollmentCountCache.delete(courseId);
 
     // Notify waitlist system that a spot has opened
     this.eventEmitter.emit('enrollment.removed', { userId, courseId });
