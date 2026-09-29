@@ -15,6 +15,23 @@ import { CourseQueryDto } from './dto/course-query.dto';
 import { SearchService } from '../search/search.service';
 import { MetricsService } from '../metrics/metrics.service';
 
+/** Result of a single CSV row during a bulk course import. */
+export interface CourseImportRowResult {
+  row: number;
+  title?: string;
+  success: boolean;
+  error?: string;
+  courseId?: string;
+}
+
+/** Summary returned by {@link CoursesService.importFromCsv}. */
+export interface CourseImportSummary {
+  total: number;
+  created: number;
+  failed: number;
+  results: CourseImportRowResult[];
+}
+
 @Injectable()
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
@@ -45,6 +62,157 @@ export class CoursesService {
 
     const sum = course.reviews.reduce((acc, review) => acc + (review.rating || 0), 0);
     return parseFloat((sum / course.reviews.length).toFixed(2));
+  }
+
+  /**
+   * Bulk import courses from a CSV file.
+   *
+   * Expected header row (case-insensitive): title, description, level,
+   * category, language, price, status. Only `title` is required. Rows are
+   * validated individually; invalid rows are reported per-row without
+   * aborting the whole import. Valid rows are persisted and a summary of
+   * created/failed entries is returned.
+   */
+  async importFromCsv(file: { buffer: Buffer }): Promise<CourseImportSummary> {
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException('A non-empty CSV file is required');
+    }
+
+    const rows = this.parseCsv(file.buffer.toString('utf-8'));
+    if (rows.length === 0) {
+      throw new BadRequestException('CSV file contains no data rows');
+    }
+
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const titleIndex = header.indexOf('title');
+    if (titleIndex === -1) {
+      throw new BadRequestException('CSV must include a "title" column');
+    }
+
+    const columnIndex = (name: string) => header.indexOf(name);
+    const results: CourseImportRowResult[] = [];
+    let created = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      const cells = rows[i];
+      const rowNumber = i + 1;
+      const title = (cells[titleIndex] ?? '').trim();
+
+      if (!title) {
+        results.push({ row: rowNumber, success: false, error: 'Missing required field: title' });
+        continue;
+      }
+
+      const statusValue = this.readCell(cells, columnIndex('status'));
+      if (statusValue && !Object.values(CourseStatus).includes(statusValue as CourseStatus)) {
+        results.push({
+          row: rowNumber,
+          title,
+          success: false,
+          error: `Invalid status: ${statusValue}`,
+        });
+        continue;
+      }
+
+      const priceValue = this.readCell(cells, columnIndex('price'));
+      let price: number | undefined;
+      if (priceValue) {
+        price = Number(priceValue);
+        if (Number.isNaN(price) || price < 0) {
+          results.push({
+            row: rowNumber,
+            title,
+            success: false,
+            error: `Invalid price: ${priceValue}`,
+          });
+          continue;
+        }
+      }
+
+      try {
+        const course = await this.create({
+          title,
+          description: this.readCell(cells, columnIndex('description')) || undefined,
+          level: this.readCell(cells, columnIndex('level')) || undefined,
+          category: this.readCell(cells, columnIndex('category')) || undefined,
+          language: this.readCell(cells, columnIndex('language')) || undefined,
+          price,
+          status: (statusValue as CourseStatus) || CourseStatus.DRAFT,
+        });
+        created++;
+        results.push({ row: rowNumber, title, success: true, courseId: course.id });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`CSV import failed for row ${rowNumber}: ${message}`);
+        results.push({ row: rowNumber, title, success: false, error: message });
+      }
+    }
+
+    return {
+      total: results.length,
+      created,
+      failed: results.length - created,
+      results,
+    };
+  }
+
+  /** Read a trimmed cell value by column index, tolerating missing columns. */
+  private readCell(cells: string[], index: number): string {
+    if (index < 0 || index >= cells.length) return '';
+    return (cells[index] ?? '').trim();
+  }
+
+  /**
+   * Minimal RFC-4180-ish CSV parser supporting quoted fields, escaped quotes
+   * and embedded newlines. Returns an array of rows (each an array of cells).
+   */
+  private parseCsv(input: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < input.length; i++) {
+      const char = input[i];
+
+      if (inQuotes) {
+        if (char === '"') {
+          if (input[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += char;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        row.push(field);
+        field = '';
+      } else if (char === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else if (char === '\r') {
+        // ignore CR; handled by LF
+      } else {
+        field += char;
+      }
+    }
+
+    if (field.length > 0 || row.length > 0) {
+      row.push(field);
+      rows.push(row);
+    }
+
+    // Drop fully empty trailing rows
+    return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
   }
 
   async findAll(query: CourseQueryDto = {}) {
@@ -235,166 +403,6 @@ export class CoursesService {
 
   private async invalidateCache() {
     await this.cacheManager.del(this.CACHE_KEY);
-    // Catalogue entries use dynamic keys, so clear the whole store. Different
-    // cache-manager versions expose this as clear() or reset(); tolerate either
-    // and treat failure as non-fatal (stale entries expire via TTL).
-    const store = this.cacheManager as unknown as {
-      clear?: () => Promise<unknown>;
-      reset?: () => Promise<unknown>;
-    };
-    try {
-      await (store.clear?.() ?? store.reset?.());
-    } catch {
-      /* non-fatal */
-    }
-  }
+    // C
 
-  async scheduleCourse(id: string, scheduledAt: Date): Promise<Course> {
-    if (scheduledAt <= new Date()) {
-      throw new BadRequestException('scheduledAt must be in the future');
-    }
-    const course = await this.findOne(id);
-    return this.repo.save({
-      ...course,
-      status: CourseStatus.SCHEDULED,
-      scheduledAt,
-      isPublished: false,
-    });
-  }
-
-  async publishNow(id: string): Promise<Course> {
-    const course = await this.findOne(id);
-    const now = new Date();
-
-    course.status = CourseStatus.PUBLISHED;
-    course.isPublished = true;
-    course.publishedAt = now;
-    course.scheduledAt = course.scheduledAt ?? null;
-
-    return this.repo.save(course);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Publishing workflow: DRAFT -> PENDING_REVIEW -> PUBLISHED, plus ARCHIVED.
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Fetches a course for a specific viewer, enforcing visibility rules:
-   * non-published courses are only visible to their creator or an admin.
-   * Anyone else gets a 404 (existence is not disclosed).
-   */
-  async findOneForViewer(
-    id: string,
-    viewer?: { id?: string; role?: string },
-  ): Promise<Course> {
-    const course = await this.findOne(id);
-    if (course.status === CourseStatus.PUBLISHED) return course;
-
-    const isPrivileged =
-      !!viewer &&
-      (viewer.role === 'admin' ||
-        (!!course.instructorId && course.instructorId === viewer.id));
-
-    if (!isPrivileged) throw new NotFoundException('Course not found');
-    return course;
-  }
-
-  /**
-   * Instructor action: move a DRAFT course to PENDING_REVIEW so an admin can
-   * approve it. Fails if the course is missing required content.
-   */
-  async submitForReview(id: string, actor: { id: string; role: string }): Promise<Course> {
-    const course = await this.loadWithModules(id);
-
-    if (actor.role !== 'admin' && course.instructorId !== actor.id) {
-      throw new ForbiddenException('You can only submit your own courses for review');
-    }
-    if (course.status !== CourseStatus.DRAFT) {
-      throw new BadRequestException(
-        `Only draft courses can be submitted for review (current status: ${course.status})`,
-      );
-    }
-    this.assertPublishable(course);
-
-    course.status = CourseStatus.PENDING_REVIEW;
-    const saved = await this.repo.save(course);
-    await this.invalidateCache();
-    this.logger.log(`Course ${id} submitted for review by ${actor.id}`);
-    return saved;
-  }
-
-  /**
-   * Admin action: approve a PENDING_REVIEW course, making it PUBLISHED and
-   * visible in the public catalogue.
-   */
-  async approveCourse(id: string): Promise<Course> {
-    const course = await this.loadWithModules(id);
-
-    if (course.status !== CourseStatus.PENDING_REVIEW) {
-      throw new BadRequestException(
-        `Only courses pending review can be approved (current status: ${course.status})`,
-      );
-    }
-    this.assertPublishable(course);
-
-    const now = new Date();
-    course.status = CourseStatus.PUBLISHED;
-    course.isPublished = true;
-    course.publishedAt = now;
-
-    const saved = await this.repo.save(course);
-    await this.invalidateCache();
-    await this.searchService.indexCourse(saved).catch(() => {});
-    this.logger.log(`Course ${id} approved and published`);
-    return saved;
-  }
-
-  /**
-   * Instructor (or admin) action: archive a PUBLISHED course, removing it from
-   * the catalogue while retaining its content.
-   */
-  async archiveCourse(id: string, actor: { id: string; role: string }): Promise<Course> {
-    const course = await this.findOne(id);
-
-    if (actor.role !== 'admin' && course.instructorId !== actor.id) {
-      throw new ForbiddenException('You can only archive your own courses');
-    }
-    if (course.status !== CourseStatus.PUBLISHED) {
-      throw new BadRequestException(
-        `Only published courses can be archived (current status: ${course.status})`,
-      );
-    }
-
-    course.status = CourseStatus.ARCHIVED;
-    course.isPublished = false;
-
-    const saved = await this.repo.save(course);
-    await this.invalidateCache();
-    await this.searchService.deleteFromIndex('courses', id).catch(() => {});
-    this.logger.log(`Course ${id} archived by ${actor.id}`);
-    return saved;
-  }
-
-  private async loadWithModules(id: string): Promise<Course> {
-    const course = await this.repo.findOne({
-      where: { id, isDeleted: false },
-      relations: ['modules'],
-    });
-    if (!course) throw new NotFoundException('Course not found');
-    return course;
-  }
-
-  /** Validates a course carries the minimum content required to be published. */
-  private assertPublishable(course: Course): void {
-    const missing: string[] = [];
-    if (!course.title || !course.title.trim()) missing.push('title');
-    if (!course.description || !course.description.trim()) missing.push('description');
-    if (!course.modules || course.modules.length === 0) missing.push('modules');
-
-    if (missing.length > 0) {
-      throw new BadRequestException(
-        `Course is missing required content: ${missing.join(', ')}`,
-      );
-    }
-  }
-}
+/* … truncated 5609 chars — edit only what you need near the top … */
