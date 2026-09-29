@@ -54,6 +54,9 @@ export class EnrollmentsService {
     const existing = await this.repo.findOne({ where: { userId, courseId } });
     if (existing) throw new ConflictException('Already enrolled in this course');
 
+    // Enforce prerequisite courses before allowing enrollment. Instructors
+    // configure prerequisites via the course prerequisites API; students must
+    // have completed every prerequisite course first.
     await this.prereqService.enforcePrerequisites(userId, courseId, adminOverride);
 
     // Pin the student to the latest published version at enrollment time
