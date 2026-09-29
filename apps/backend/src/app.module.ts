@@ -113,6 +113,7 @@ const BODY_SIZE_LIMIT = '1mb';
     RateLimitModule,
     ApiVersionModule,
     MonitoringModule,
+    ApiDocsModule,
   ],
   providers: [
     {
