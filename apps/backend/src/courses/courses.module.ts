@@ -32,6 +32,9 @@ import { User } from '../users/user.entity';
 import { CourseInstructor } from './course-instructor.entity';
 import { InstructorAssignmentService } from './instructor-assignment.service';
 import { InstructorAssignmentController } from './instructor-assignment.controller';
+import { CourseImportService } from './course-import.service';
+import { CourseImportController } from './course-import.controller';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -50,6 +53,7 @@ import { InstructorAssignmentController } from './instructor-assignment.controll
     NotificationsModule,
     MetricsModule,
     AnnouncementsModule,
+    AuditModule,
   ],
   providers: [
     CoursesService,
@@ -62,6 +66,7 @@ import { InstructorAssignmentController } from './instructor-assignment.controll
     DripSchedulerService,
     TranscribeService,
     InstructorAssignmentService,
+    CourseImportService,
   ],
   controllers: [
     CoursesController,
@@ -70,6 +75,7 @@ import { InstructorAssignmentController } from './instructor-assignment.controll
     CourseVersioningController,
     PrerequisitesController,
     InstructorAssignmentController,
+    CourseImportController,
   ],
   exports: [CoursesService, PrerequisitesService],
 })
