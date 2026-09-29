@@ -3,11 +3,18 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { EnrollmentsService } from './enrollments.service';
 
+const ENROLLMENT_COUNT_TTL_MS = 60_000;
+
 @ApiTags('enrollments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class EnrollmentsController {
+  private enrollmentCountCache = new Map<
+    string,
+    { value: number; expiresAt: number }
+  >();
+
   constructor(private enrollmentsService: EnrollmentsService) {}
 
   @Post('courses/:id/enroll')
@@ -86,6 +93,32 @@ export class EnrollmentsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   getUserEnrollments(@Param('id') userId: string) {
     return this.enrollmentsService.findByUser(userId);
+  }
+
+  @Get('courses/:id/enrollments/count')
+  @ApiOperation({ summary: 'Get the enrollment count for a course' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @ApiResponse({
+    status: 200,
+    description: 'Enrollment count for the course',
+    schema: { example: { count: 42 } },
+  })
+  async getEnrollmentCount(@Param('id') courseId: string) {
+    const cached = this.enrollmentCountCache.get(courseId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { count: cached.value };
+    }
+
+    const count = await this.enrollmentsService.countByCourse(courseId);
+    this.enrollmentCountCache.set(courseId, {
+      value: count,
+      expiresAt: Date.now() + ENROLLMENT_COUNT_TTL_MS,
+    });
+    return { count };
   }
 
   @Post('courses/:id/enroll/upgrade-version')

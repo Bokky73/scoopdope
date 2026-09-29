@@ -64,18 +64,35 @@ export class CoursesService {
     return parseFloat((sum / course.reviews.length).toFixed(2));
   }
 
-  /**
-   * Bulk import courses from a CSV file.
-   *
-   * Expected header row (case-insensitive): title, description, level,
-   * category, language, price, status. Only `title` is required. Rows are
-   * validated individually; invalid rows are reported per-row without
-   * aborting the whole import. Valid rows are persisted and a summary of
-   * created/failed entries is returned.
-   */
-  async importFromCsv(file: { buffer: Buffer }): Promise<CourseImportSummary> {
-    if (!file || !file.buffer || file.buffer.length === 0) {
-      throw new BadRequestException('A non-empty CSV file is required');
+  async findAll(query: CourseQueryDto = {}) {
+    const { search, level, category, language, page = 1, limit = 20 } = query;
+
+    // Cache key encodes all filter params; skip cache for search queries
+    const cacheKey = !search
+      ? `courses:catalog:${level ?? ''}:${category ?? ''}:${language ?? ''}:${page}:${limit}`
+      : null;
+
+    if (cacheKey) {
+      const cached = await this.cacheManager.get(cacheKey);
+      if (cached) {
+        this.metricsService.incrementCacheHit('courses');
+        return cached;
+      }
+      this.metricsService.incrementCacheMiss('courses');
+    }
+
+    // Only PUBLISHED courses are visible in the public catalogue. Draft,
+    // pending-review, scheduled and archived courses are excluded here.
+    const qb = this.repo
+      .createQueryBuilder('course')
+      .where('course.status = :publishedStatus', { publishedStatus: CourseStatus.PUBLISHED })
+      .andWhere('course.isDeleted = :isDeleted', { isDeleted: false });
+
+    if (search) {
+      // Case-insensitive match on title/description (ILIKE handles casing).
+      qb.andWhere('(course.title ILIKE :search OR course.description ILIKE :search)', {
+        search: `%${search}%`,
+      });
     }
 
     const rows = this.parseCsv(file.buffer.toString('utf-8'));
@@ -189,66 +206,8 @@ export class CoursesService {
         continue;
       }
 
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ',') {
-        row.push(field);
-        field = '';
-      } else if (char === '\n') {
-        row.push(field);
-        rows.push(row);
-        row = [];
-        field = '';
-      } else if (char === '\r') {
-        // ignore CR; handled by LF
-      } else {
-        field += char;
-      }
-    }
+  private async invalidateCache() {
+    await this.cacheManager.del(this.CACHE_KEY);
+    // C
 
-    if (field.length > 0 || row.length > 0) {
-      row.push(field);
-      rows.push(row);
-    }
-
-    // Drop fully empty trailing rows
-    return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
-  }
-
-  async findAll(query: CourseQueryDto = {}) {
-    const { search, level, category, language, page = 1, limit = 20 } = query;
-
-    // Cache key encodes all filter params; skip cache for search queries
-    const cacheKey = !search
-      ? `courses:catalog:${level ?? ''}:${category ?? ''}:${language ?? ''}:${page}:${limit}`
-      : null;
-
-    if (cacheKey) {
-      const cached = await this.cacheManager.get(cacheKey);
-      if (cached) {
-        this.metricsService.incrementCacheHit('courses');
-        return cached;
-      }
-      this.metricsService.incrementCacheMiss('courses');
-    }
-
-    // Only PUBLISHED courses are visible in the public catalogue. Draft,
-    // pending-review, scheduled and archived courses are excluded here.
-    const qb = this.repo
-      .createQueryBuilder('course')
-      .where('course.status = :publishedStatus', { publishedStatus: CourseStatus.PUBLISHED })
-      .andWhere('course.isDeleted = :isDeleted', { isDeleted: false });
-
-    if (search) {
-      qb.andWhere('(course.title ILIKE :search OR course.description ILIKE :search)', {
-        search: `%${search}%`,
-      });
-    }
-
-    if (level) {
-      qb.andWhere('course.level = :level', { level });
-    }
-
-    i
-
-/* … truncated 5174 chars — edit only what you need near the top … */
+/* … truncated 5609 chars — edit only what you need near the top … */

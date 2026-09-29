@@ -115,6 +115,15 @@ export class CredentialsService {
 
   async verify(txHash: string) {
     const credential = await this.repo.findOne({ where: { txHash } });
-    return { credential, verified: !!credential };
+    if (!credential) {
+      return { credential: null, verified: false, expired: false, message: 'Credential not found' };
+    }
+    const isExpired = credential.expiresAt ? new Date(credential.expiresAt) < new Date() : false;
+    return {
+      credential,
+      verified: !isExpired,
+      expired: isExpired,
+      message: isExpired ? 'Credential has expired' : 'Credential verified successfully',
+    };
   }
 }

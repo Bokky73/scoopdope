@@ -127,4 +127,10 @@ export default () => ({
     moduleCompletion: parseInt(process.env.REWARD_MODULE_COMPLETION ?? '25', 10),
     courseCompletion: parseInt(process.env.REWARD_COURSE_COMPLETION ?? '100', 10),
   },
+
+  vapid: {
+    publicKey: process.env.VAPID_PUBLIC_KEY || '',
+    privateKey: process.env.VAPID_PRIVATE_KEY || '',
+    subject: process.env.VAPID_SUBJECT || 'mailto:admin@scoopdope.com',
+  },
 });
