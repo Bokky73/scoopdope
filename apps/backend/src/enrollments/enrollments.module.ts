@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Enrollment } from './enrollment.entity';
 import { EnrollmentsService } from './enrollments.service';
 import { EnrollmentsController } from './enrollments.controller';
@@ -13,6 +14,7 @@ import { StellarModule } from '../stellar/stellar.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Enrollment, CourseVersion, Course]),
+    CacheModule.register({ ttl: 60_000 }),
     CoursesModule,
     MetricsModule,
     StellarModule,

@@ -37,6 +37,8 @@ export class Notification {
   @Column({ default: false })
   isRead: boolean;
 
-  @CreateDateColumn()
+  // #1022: store notification timestamps as UTC with timezone info so
+  // clients can render them consistently regardless of server locale.
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }
