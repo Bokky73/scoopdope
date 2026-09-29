@@ -26,13 +26,13 @@ The API uses **URL-based major versioning**. Every route is prefixed with the
 current major version:
 
 ```
-/v1/<resource>
+/api/v1/<resource>
 ```
 
 This prefix is applied globally in `apps/backend/src/main.ts`:
 
 ```ts
-app.setGlobalPrefix('v1', {
+app.setGlobalPrefix('api/v1', {
   exclude: ['health', 'health/live', 'health/ready', ...],
 });
 ```

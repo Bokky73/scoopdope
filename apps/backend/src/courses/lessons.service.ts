@@ -4,6 +4,7 @@ import { Repository, IsNull, Not } from 'typeorm';
 import { Lesson } from './lesson.entity';
 import { SearchService } from '../search/search.service';
 import { TranscribeService } from './transcribe.service';
+import { ProgressService } from '../progress/progress.service';
 import { Interval } from '@nestjs/schedule';
 import { Course } from './course.entity';
 
@@ -95,8 +96,36 @@ export class LessonsService {
   async remove(id: string) {
     const lesson = await this.findOne(id);
     if (!lesson) throw new NotFoundException('Lesson not found');
+
+    // Count total lessons in the same module's course before deletion
+    const moduleId = lesson.moduleId;
+    const lessonModule = await this.repo.manager.query(
+      `SELECT "courseId" FROM course_modules WHERE id = $1`,
+      [moduleId],
+    );
+    const courseId: string | undefined = lessonModule[0]?.courseId;
+
+    let totalBefore = 0;
+    if (courseId) {
+      totalBefore = await this.repo
+        .createQueryBuilder('lesson')
+        .innerJoin('course_modules', 'module', 'module.id = lesson."moduleId"')
+        .where('module."courseId" = :courseId', { courseId })
+        .getCount();
+    }
+
     await this.searchService.deleteFromIndex('lessons', id).catch(() => {});
-    return this.repo.remove(lesson);
+    await this.repo.remove(lesson);
+
+    // Recalculate enrolled users' progress now that one lesson is gone
+    if (courseId && totalBefore > 0) {
+      const totalAfter = totalBefore - 1;
+      await this.progressService
+        .recalcOnLessonDeletion(courseId, id, totalBefore, totalAfter)
+        .catch((err) =>
+          this.logger.error(`Failed to recalc progress after lesson deletion: ${err.message}`),
+        );
+    }
   }
 
   /**

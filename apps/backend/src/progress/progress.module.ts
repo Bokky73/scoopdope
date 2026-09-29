@@ -25,5 +25,6 @@ import { Enrollment } from '../enrollments/enrollment.entity';
   ],
   providers: [ProgressService],
   controllers: [ProgressController],
+  exports: [ProgressService],
 })
 export class ProgressModule {}

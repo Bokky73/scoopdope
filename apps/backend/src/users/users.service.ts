@@ -41,6 +41,13 @@ export class UsersService {
       .getOne();
   }
 
+  async updateFailedLoginAttempts(userId: string, failedAttempts: number, lockoutUntil: Date | null): Promise<void> {
+    await this.repo.update(userId, {
+      failedLoginAttempts: failedAttempts,
+      lockoutUntil: lockoutUntil,
+    });
+  }
+
   findByVerificationToken(hash: string) {
     return this.repo.findOne({ where: { verificationToken: hash } });
   }

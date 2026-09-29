@@ -3,6 +3,7 @@ import { Trim, Sanitize } from 'class-sanitizer';
 import { StripHtmlSanitizer } from '../../common/sanitizers/strip-html.sanitizer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { Transform } from 'class-transformer';
 
 export class CourseQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Search query for the course search endpoint' })
