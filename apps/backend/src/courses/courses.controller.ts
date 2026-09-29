@@ -120,8 +120,23 @@ export class CoursesController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiResponse({
     status: 200,
-    description: 'Returns a single course',
-    schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
+    description: 'Returns a single course including instructor profile details',
+    schema: {
+      example: {
+        data: {
+          id: 'uuid',
+          title: 'Intro to Stellar',
+          instructor: {
+            id: 'uuid',
+            name: 'Jane Doe',
+            avatarUrl: 'https://example.com/avatar.png',
+            bio: 'Blockchain educator',
+          },
+        },
+        statusCode: 200,
+        timestamp: '2024-01-01T00:00:00.000Z',
+      },
+    },
   })
   @ApiResponse({
     status: 404,
@@ -247,115 +262,20 @@ export class CoursesController {
     description: 'Course updated successfully',
     schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  @ApiResponse({ status: 404, description: 'Course not found' })
   update(@Param('id') id: string, @Body() data: any) {
     return this.coursesService.update(id, data);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
+  @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a course' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiResponse({
-    status: 200,
-    description: 'Course deleted successfully',
-    schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
-  })
+  @ApiResponse({ status: 200, description: 'Course deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 403, description: 'Forbidden - admin only' })
   @ApiResponse({ status: 404, description: 'Course not found' })
-  delete(@Param('id') id: string) {
-    return this.coursesService.delete(id);
+  remove(@Param('id') id: string) {
+    return this.coursesService.remove(id);
   }
-
-  @Post(':id/schedule')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Schedule a course for future publication' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiBody({ type: ScheduleCourseDto })
-  @ApiResponse({ status: 200, description: 'Course scheduled' })
-  @ApiResponse({ status: 400, description: 'scheduledAt must be in the future' })
-  schedule(@Param('id') id: string, @Body() dto: ScheduleCourseDto) {
-    const scheduledAt = resolveScheduledAt(dto.scheduledAt, dto.timezone);
-    return this.coursesService.scheduleCourse(id, scheduledAt);
-  }
-
-  @Post(':id/publish')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'instructor')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Immediately publish a course' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiResponse({ status: 200, description: 'Course published' })
-  publish(@Param('id') id: string) {
-    return this.coursesService.publishCourse(id);
-  }
-}
-
-function parseCsv(content: string): Record<string, string>[] {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  if (lines.length < 2) {
-    return [];
-  }
-
-  const headers = splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
-  const rows: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = splitCsvLine(lines[i]);
-    const row: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      row[header] = values[index] ?? '';
-    });
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function splitCsvLine(line: string): string[] {
-  const values: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      values.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  values.push(current);
-
-  return values;
 }
