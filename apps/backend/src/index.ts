@@ -1,38 +1,45 @@
 import express from 'express';
-import pino from 'pino';
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  timestamp: pino.stdTimeFunctions.isoTime,
-  formatters: {
-    level: (label) => ({ level: label }),
-  },
-});
+import client from 'prom-client';
 
 const app = express();
 
+// Collect default metrics (CPU, memory, event loop, etc.)
+client.collectDefaultMetrics();
+
+// Histogram to monitor HTTP endpoint response times
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+});
+
+// Middleware to record response times for every request
 app.use((req, res, next) => {
-  const start = Date.now();
+  const end = httpRequestDuration.startTimer();
   res.on('finish', () => {
-    logger.info({
+    end({
       method: req.method,
-      url: req.originalUrl,
-      status: res.statusCode,
-      durationMs: Date.now() - start,
-    }, 'request completed');
+      route: req.route ? req.route.path : req.path,
+      status_code: res.statusCode,
+    });
   });
   next();
 });
 
-app.get('/health', (req, res) => {
-  logger.info('health check');
-  res.json({ status: 'ok' });
+// Expose collected metrics for Prometheus scraping
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
 });
 
-const port = Number(process.env.PORT) || 3000;
+app.get('/', (_req, res) => {
+  res.send('OK');
+});
 
+const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  logger.info({ port }, 'server started');
+  console.log(`Server listening on port ${port}`);
 });
 
 export default app;
