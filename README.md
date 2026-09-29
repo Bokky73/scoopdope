@@ -229,17 +229,17 @@ See `.env.example` for the full list. Key variables:
 
 ## API Endpoints
 
-All API endpoints are prefixed with `/v1` for versioning.
+All API endpoints are prefixed with `/api/v1` for versioning.
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/auth/register` | Register a new user |
-| POST | `/v1/auth/login` | Login and receive JWT |
+| POST | `/api/v1/auth/register` | Register a new user |
+| POST | `/api/v1/auth/login` | Login and receive JWT |
 
-| GET | `/v1/courses` | List all published courses |
-| GET | `/v1/courses/:id` | Get a single course |
-| GET | `/v1/users/:id` | Get user profile |
-| GET | `/v1/stellar/balance/:publicKey` | Get Stellar account balances |
+| GET | `/api/v1/courses` | List all published courses |
+| GET | `/api/v1/courses/:id` | Get a single course |
+| GET | `/api/v1/users/:id` | Get user profile |
+| GET | `/api/v1/stellar/balance/:publicKey` | Get Stellar account balances |
 
 **Interactive API Documentation:**
 - Local: `http://localhost:3000/api/docs`

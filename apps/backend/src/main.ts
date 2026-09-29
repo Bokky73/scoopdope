@@ -102,7 +102,7 @@ async function bootstrap() {
   app.use((req, res, next) => correlationId.use(req, res, next));
   app.use((req, res, next) => requestValidation.use(req, res, next));
 
-  app.setGlobalPrefix('v1', { exclude: ['health', 'health/live', 'health/ready', 'health/startup', 'health/environment', 'health/version'] });
+  app.setGlobalPrefix('api/v1', { exclude: ['health', 'health/live', 'health/ready', 'health/startup', 'health/environment', 'health/version'] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }), new SanitizationPipe());
   app.useGlobalFilters(new HttpExceptionFilter(), new ValidationExceptionFilter());
   app.useGlobalInterceptors(
@@ -148,22 +148,22 @@ async function bootstrap() {
         '## Authentication\n\n' +
         'This API uses JWT Bearer tokens for authentication.\n\n' +
         '### Getting Started\n\n' +
-        '1. **Register**: POST /v1/auth/register with email and password\n' +
-        '2. **Login**: POST /v1/auth/login to receive access_token\n' +
+        '1. **Register**: POST /api/v1/auth/register with email and password\n' +
+        '2. **Login**: POST /api/v1/auth/login to receive access_token\n' +
         '3. **Authorize**: Click "Authorize" button and enter: `Bearer <access_token>`\n' +
         '4. **Use API**: All protected endpoints now accessible\n\n' +
         '### Example Flow\n\n' +
         '```bash\n' +
         '# Register\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/register \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/register \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Login\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/login \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/login \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Use token in subsequent requests\n' +
-        'curl -X GET https://api.scoopdope.com/v1/courses \\\n' +
+        'curl -X GET https://api.scoopdope.com/api/v1/courses \\\n' +
         '  -H "Authorization: Bearer <your_access_token>"\n' +
         '```'
     )
@@ -175,8 +175,8 @@ async function bootstrap() {
       description: 'Enter JWT token obtained from /v1/auth/login',
     })
     .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-KEY' }, 'X-API-KEY')
-    .addServer(`/${LATEST_API_VERSION}`, `API ${LATEST_API_VERSION} (latest)`)
-    .addServer(`/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION} (default)`)
+    .addServer(`/api/${LATEST_API_VERSION}`, `API ${LATEST_API_VERSION} (latest)`)
+    .addServer(`/api/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION} (default)`)
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
