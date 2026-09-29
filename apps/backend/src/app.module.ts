@@ -31,6 +31,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { LiveSessionsModule } from './live-sessions/live-sessions.module';
 import { PaymentsModule } from './payments/payments.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { ApiDocsModule } from './api-docs/api-docs.module';
 import * as redisStore from 'cache-manager-redis-store';
 import configuration from './config/configuration';
 import { validationSchema } from './config/validation.schema';
@@ -107,6 +108,7 @@ import { UserRateLimitGuard } from './rate-limit/user-rate-limit.guard';
     RateLimitModule,
     ApiVersionModule,
     MonitoringModule,
+    ApiDocsModule,
   ],
   providers: [
     {

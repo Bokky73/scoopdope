@@ -187,11 +187,13 @@ async function bootstrap() {
   if (process.env.EXPORT_OPENAPI === 'true' || process.argv.includes('--export-openapi')) {
     const outputPath = join(__dirname, '..', 'openapi.json');
     writeFileSync(outputPath, JSON.stringify(document, null, 2));
-    logger.log(`OpenAPI spec exported to ${outputPath}`);
-    process.exit(0);
+    logger.log(`OpenAPI specification exported to ${outputPath}`);
   }
 
-  await app.listen(port ?? 3000);
-  logger.log(`scoopdope API running on port ${port} [${nodeEnv}]`);
+  await app.listen(port);
+  logger.log(`Application is running on port ${port}`);
+  logger.log(`API documentation available at /api/docs`);
+  logger.log(`API version: ${v1Info.version} (${v1Info.status})`);
 }
+
 bootstrap();
