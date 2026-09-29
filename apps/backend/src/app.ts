@@ -3,6 +3,11 @@ import promClient from 'prom-client';
 
 const app = express();
 
+// Global request body size limit (1MB) to reject oversized payloads
+const BODY_LIMIT = '1mb';
+app.use(express.json({ limit: BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+
 // Collect default metrics (CPU, memory, event loop, etc.)
 promClient.collectDefaultMetrics();
 
@@ -31,6 +36,16 @@ app.use((req, res, next) => {
 app.get('/metrics', async (_req, res) => {
   res.set('Content-Type', promClient.register.contentType);
   res.end(await promClient.register.metrics());
+});
+
+// Return 413 Payload Too Large for oversized request bodies
+type BodyParserError = Error & { status?: number; statusCode?: number; type?: string };
+app.use((err: BodyParserError, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413 || err.statusCode === 413)) {
+    res.status(413).json({ error: 'Payload Too Large' });
+    return;
+  }
+  next(err);
 });
 
 export default app;

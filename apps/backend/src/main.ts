@@ -1,6 +1,7 @@
 import './tracing';
 import './instrument';
 import * as compression from 'compression';
+import * as express from 'express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -25,6 +26,9 @@ import {
   LATEST_API_VERSION,
   getVersionInfo,
 } from './common/versioning';
+
+// #1008: Global request body size limit (1MB).
+const BODY_SIZE_LIMIT = '1mb';
 
 async function runMigrationCommand(command: string) {
   const logger = new Logger('MigrationCommand');
@@ -75,6 +79,10 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableShutdownHooks();
+
+  // #1008: Reject request bodies larger than the global limit with 413.
+  app.use(express.json({ limit: BODY_SIZE_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: BODY_SIZE_LIMIT }));
 
   // #882: Enable gzip compression for responses >1KB
   app.use(
@@ -183,15 +191,20 @@ async function bootstrap() {
     })
     .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-KEY' }, 'X-API-KEY')
     .addServer(`/${LATEST_API_VERSION}`, `API ${LATEST_API_VERSION} (latest)`)
-    .addServer(`/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION} (default)`)
+    .addServer(`/${DEFAULT_API_VERSION}`, `API ${DEFAULT_API_VERSION}`)
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    jsonDocumentUrl: 'api-json',
-  });
+  SwaggerModule.setup('api/docs', app, document);
 
-  if (process.env.EXPORT_OPENAPI === 'true' || process.argv.includes('--export-openapi')) {
-    const outputPath = join(__dirname, '..', 'o
+  writeFileSync(
+    join(process.cwd(), 'openapi.json'),
+    JSON.stringify(document, null, 2),
+  );
 
-/* … truncated 282 chars — edit only what you need near the top … */
+  await app.listen(port);
+  logger.log(`Application is running on port ${port}`);
+  logger.log(`API version: ${v1Info.version} (${v1Info.status})`);
+}
+
+bootstrap();
