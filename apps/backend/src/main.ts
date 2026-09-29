@@ -177,22 +177,22 @@ async function bootstrap() {
         '## Authentication\n\n' +
         'This API uses JWT Bearer tokens for authentication.\n\n' +
         '### Getting Started\n\n' +
-        '1. **Register**: POST /v1/auth/register with email and password\n' +
-        '2. **Login**: POST /v1/auth/login to receive access_token\n' +
+        '1. **Register**: POST /api/v1/auth/register with email and password\n' +
+        '2. **Login**: POST /api/v1/auth/login to receive access_token\n' +
         '3. **Authorize**: Click "Authorize" button and enter: `Bearer <access_token>`\n' +
         '4. **Use API**: All protected endpoints now accessible\n\n' +
         '### Example Flow\n\n' +
         '```bash\n' +
         '# Register\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/register \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/register \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Login\n' +
-        'curl -X POST https://api.scoopdope.com/v1/auth/login \\\n' +
+        'curl -X POST https://api.scoopdope.com/api/v1/auth/login \\\n' +
         '  -H "Content-Type: application/json" \\\n' +
         '  -d \'{"email":"user@example.com","password":"securepass123"}\'\n\n' +
         '# Use token in subsequent requests\n' +
-        'curl -X GET https://api.scoopdope.com/v1/courses \\\n' +
+        'curl -X GET https://api.scoopdope.com/api/v1/courses \\\n' +
         '  -H "Authorization: Bearer <your_access_token>"\n' +
         '```'
     )
