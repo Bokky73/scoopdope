@@ -118,7 +118,21 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('v1', { exclude: ['health', 'health/live', 'health/ready', 'health/startup', 'health/environment', 'health/version'] });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }), new SanitizationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      // Strip properties not declared in the DTO
+      whitelist: true,
+      // Reject requests that contain extra properties not in the DTO
+      forbidNonWhitelisted: true,
+      // Auto-transform plain objects to DTO class instances and coerce
+      // primitive query/path params to their declared types (e.g. "1" → 1)
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+      // Return all constraint violations at once instead of stopping at first
+      stopAtFirstError: false,
+    }),
+    new SanitizationPipe(),
+  );
   app.useGlobalFilters(new HttpExceptionFilter(), new ValidationExceptionFilter());
   app.useGlobalInterceptors(
     new TransformInterceptor(),
