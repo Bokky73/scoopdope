@@ -51,6 +51,7 @@ export class NotificationsService {
       type,
       message,
       title: title ?? null,
+      createdAt: new Date(),
     });
     const saved = await this.repo.save(notification);
     this.gateway.emitToUser(userId, 'notification', saved);
@@ -131,12 +132,14 @@ export class NotificationsService {
 
       if (users.length === 0) break;
 
+      const createdAt = new Date();
       const notifications = this.repo.create(
         users.map((u) => ({
           userId: u.id,
           type: payload.type,
           title: payload.title,
           message: payload.message,
+          createdAt,
         })),
       );
       const saved = await this.repo.save(notifications);
@@ -152,6 +155,38 @@ export class NotificationsService {
     }
 
     return results;
+  }
+
+  /**
+   * Notify all enrolled students in a course using a single bulk insert
+   * instead of N individual inserts.
+   */
+  async notifyCourseStudents(
+    userIds: string[],
+    type: NotificationType,
+    message: string,
+    title?: string,
+  ): Promise<Notification[]> {
+    if (userIds.length === 0) return [];
+
+    const createdAt = new Date();
+    const notifications = this.repo.create(
+      userIds.map((userId) => ({
+        userId,
+        type,
+        message,
+        title: title ?? null,
+        createdAt,
+      })),
+    );
+    const saved = await this.repo.save(notifications);
+
+    // Emit via WebSocket to online users
+    for (const n of saved) {
+      this.gateway.emitToUser(n.userId, 'notification', n);
+    }
+
+    return saved;
   }
 
   /**
