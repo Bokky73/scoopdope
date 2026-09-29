@@ -3,6 +3,7 @@ import './instrument';
 import * as compression from 'compression';
 import * as express from 'express';
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe, Logger } from '@nestjs/common';
@@ -67,9 +68,7 @@ async function runMigrationCommand(command: string) {
 }
 
 async function bootstrap() {
-  const migrationCommand = process.argv
-    .slice(2)
-    .find((a) => a.startsWith('migration:'));
+  const app = await NestFactory.create(AppModule);
 
   if (migrationCommand) {
     await runMigrationCommand(migrationCommand);
@@ -151,7 +150,7 @@ async function bootstrap() {
     maxAge: corsPreflight,
   });
 
-  const v1Info = getVersionInfo('v1');
+  app.enableCors();
 
   const config = new DocumentBuilder()
     .setTitle('scoopdope API')

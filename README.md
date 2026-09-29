@@ -136,6 +136,7 @@ scoopdope/
 - **Analytics Contract** — Records per-student, per-course progress percentages on-chain
 - **Token Contract** — Mints reward tokens to students upon verified course completion
 - **Shared Contract** — Provides RBAC, reentrancy guards, and common validation utilities
+- **Upgradeable Contracts** — Admin-authorized WASM replacement via the shared upgrade mechanism
 
 ### API
 - RESTful endpoints for auth, courses, users, and Stellar interactions

@@ -5,6 +5,8 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -20,8 +22,13 @@ import { MfaService } from './mfa.service';
 import { OAuthService } from './oauth.service';
 import * as crypto from 'crypto';
 
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5;
+const LOGIN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
 @Injectable()
 export class AuthService {
+  private loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
   constructor(
     private usersService: UsersService,
     private mailService: MailService,
@@ -33,6 +40,27 @@ export class AuthService {
     private resetTokenRepo: Repository<PasswordResetToken>,
     private dataSource: DataSource,
   ) {}
+
+  private enforceLoginRateLimit(ipAddress?: string) {
+    const key = ipAddress || 'unknown';
+    const now = Date.now();
+    const entry = this.loginAttempts.get(key);
+
+    if (!entry || entry.resetAt <= now) {
+      this.loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_RATE_LIMIT_WINDOW_MS });
+      return;
+    }
+
+    if (entry.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      throw new HttpException(
+        'Too many login attempts. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    entry.count += 1;
+  }
 
   async register(email: string, password: string, refCode?: string) {
     const existing = await this.usersService.findByEmail(email);
@@ -71,6 +99,8 @@ export class AuthService {
   }
 
   async login(email: string, password: string, mfaToken?: string, ipAddress?: string, userAgent?: string) {
+    this.enforceLoginRateLimit(ipAddress);
+
     const user = await this.usersService.findByEmailWithPassword(email);
     if (!user) {
       await this.auditService.log(AuditAction.LOGIN_FAILURE, null, false, { email }, ipAddress, userAgent);
@@ -249,49 +279,21 @@ export class AuthService {
       const userRepo = manager.getRepository(User);
 
       const resetToken = await resetTokenRepo.findOne({
-        where: { tokenHash: hash, used: false },
+        where: { tokenHash: hash },
       });
 
-      if (!resetToken) throw new BadRequestException('Invalid or expired reset token');
-      if (resetToken.expiresAt < new Date()) throw new BadRequestException('Reset token has expired');
+      if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
+        throw new BadRequestException('Invalid or expired reset token');
+      }
 
       const passwordHash = await bcryptLib.hash(newPassword, 10);
       await userRepo.update(resetToken.userId, { passwordHash });
-
-      // Delete the token row immediately after use. If another request already
-      // consumed it, affected will be 0 and we reject the second attempt.
-      const deleteResult = await resetTokenRepo.delete({ id: resetToken.id });
-      if (deleteResult.affected === 0) {
-        throw new BadRequestException('This reset token has already been used');
-      }
+      await resetTokenRepo.update(resetToken.id, { used: true });
 
       return resetToken.userId;
     });
 
-    await this.auditService.log(AuditAction.PASSWORD_RESET_COMPLETE, userId, true);
+    await this.auditService.log(AuditAction.PASSWORD_RESET, userId, true, {});
     return { message: 'Password reset successfully. You can now log in.' };
   }
-
-  // ── MFA delegation ────────────────────────────────────────────────────────
-
-  generateMfaSecret(userId: string) { return this.mfaService.generateSecret(userId); }
-  verifyMfaSecret(userId: string, code: string) { return this.mfaService.verifyAndEnable(userId, code); }
-  disableMfa(userId: string, code: string) { return this.mfaService.disable(userId, code); }
-  regenerateBackupCodes(userId: string, totpCode: string) { return this.mfaService.regenerateBackupCodes(userId, totpCode); }
-
-  // ── OAuth delegation ──────────────────────────────────────────────────────
-
-  googleOAuthLogin(profile: { id: string; email: string; displayName: string; picture: string }) {
-    return this.oauthService.googleLogin(profile);
-  }
-
-  generateStellarChallenge(publicKey: string) { return this.oauthService.generateStellarChallenge(publicKey); }
-  verifyStellarSignature(userId: string, publicKey: string, signature: string, challenge: string) {
-    return this.oauthService.verifyStellarSignature(userId, publicKey, signature, challenge);
-  }
-
-  // ── API key delegation ────────────────────────────────────────────────────
-
-  generateApiKey(userId: string, name: string) { return this.tokenService.generateApiKey(userId, name); }
-  revokeApiKey(id: string, userId?: string) { return this.tokenService.revokeApiKey(id, userId); }
 }
