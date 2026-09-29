@@ -14,7 +14,50 @@ The platform combines a modern web frontend, a scalable REST API backend, and a 
 
 ## Architecture
 
-![scoopdope System Architecture](./docs/architecture.svg)
+The diagram below shows how the main components of scoopdope interact: the frontend, the REST API, the PostgreSQL database, the Stellar/Soroban blockchain layer, and the notification subsystem.
+
+```mermaid
+flowchart LR
+    subgraph Client
+        FE["Frontend\n(Next.js 14)"]
+    end
+
+    subgraph Backend["Backend (NestJS REST API)"]
+        API["API / Controllers\n(/v1 routes, JWT + RBAC)"]
+        NOTIF["Notifications\n(email / in-app)"]
+    end
+
+    subgraph Data
+        DB[("PostgreSQL\n(TypeORM)")]
+        CACHE[("Redis\n(cache / sessions)")]
+    end
+
+    subgraph Blockchain["Stellar / Soroban"]
+        ANALYTICS["Analytics Contract\n(on-chain progress)"]
+        TOKEN["Token Contract\n(BST rewards)"]
+        SHARED["Shared Contract\n(RBAC / guards)"]
+    end
+
+    FE -->|REST /v1| API
+    API --> DB
+    API --> CACHE
+    API -->|issue credentials| ANALYTICS
+    API -->|mint rewards| TOKEN
+    ANALYTICS -.-> SHARED
+    TOKEN -.-> SHARED
+    API -->|course / reward events| NOTIF
+    NOTIF -->|email / in-app| FE
+```
+
+**Component responsibilities:**
+
+| Component | Role |
+|---|---|
+| Frontend | Next.js 14 app; wallet integration and learner UI |
+| API | NestJS REST API exposing `/v1` routes with JWT auth and role guards |
+| Database | PostgreSQL via TypeORM for users, courses, and enrollments |
+| Blockchain | Soroban contracts on Stellar for credentials, progress, and token rewards |
+| Notifications | Emits email / in-app notifications on course and reward events |
 
 > Full diagram with data-flow annotations: [`docs/architecture.md`](./docs/architecture.md)
 
@@ -37,8 +80,8 @@ scoopdope/
 │   ├── api-rate-limiting.md
 │   ├── community-moderation.md
 │   ├── catastrophic-recovery.md
-│   ├── contract-upgrades.md
-│   └── kyc-verification.md
+│   ├── kyc-verification.md
+│   └── contract-abi.md    # Soroban contract ABI reference
 ├── .github/workflows/     # CI/CD pipelines
 ├── Cargo.toml             # Rust workspace
 ├── package.json           # Node.js workspace root
@@ -102,7 +145,11 @@ scoopdope/
 
 ---
 
-## Prerequisites
+## Getting Started
+
+Follow these steps to run scoopdope locally.
+
+### Prerequisites
 
 | Tool | Version |
 |---|---|
@@ -112,10 +159,6 @@ scoopdope/
 | Rust | v1.75 or higher |
 | Stellar CLI | v21.5.0 |
 | Docker | Optional (for local Stellar testnet) |
-
----
-
-## Quick Start
 
 ### 1. Clone the repository
 
@@ -214,53 +257,20 @@ Requires `STELLAR_SECRET_KEY` set in your environment.
 
 ---
 
-## Smart Contract Upgrades
+## Smart Contract ABI
 
-Soroban contracts in this monorepo are upgradeable. Each contract stores its own
-WASM hash and exposes an admin-gated `upgrade` entry point, so a new contract
-version can be rolled out on-chain without changing the contract address or
-losing stored state.
+The Soroban contracts expose a public interface (ABI) that the backend and Stellar CLI use to invoke them. Each contract function is documented inline with Rust doc comments (`///`) covering its parameters and return type, and the full interface is catalogued in the ABI reference.
 
-### Upgrade mechanism
+| Contract | Function | Parameters | Returns |
+|---|---|---|---|
+| Analytics | `record_progress` | `student: Address`, `course_id: Symbol`, `progress: u32` | `()` |
+| Analytics | `get_progress` | `student: Address`, `course_id: Symbol` | `u32` |
+| Token | `mint_reward` | `to: Address`, `amount: i128` | `()` |
+| Token | `balance` | `owner: Address` | `i128` |
+| Shared | `grant_role` | `admin: Address`, `account: Address`, `role: Symbol` | `()` |
+| Shared | `has_role` | `account: Address`, `role: Symbol` | `bool` |
 
-- The contract admin (set at initialization) is the only account authorized to
-  call `upgrade`.
-- `upgrade(new_wasm_hash)` verifies the caller is the admin, then replaces the
-  contract's executable with the referenced WASM while preserving all ledger
-  storage (balances, progress records, RBAC roles, etc.).
-- The new WASM must already be installed on the network before the upgrade call.
-
-### Upgrade procedure
-
-```bash
-# 1. Build the new contract version
-./scripts/build.sh
-
-# 2. Install the new WASM on the target network and capture its hash
-stellar contract install \
-  --network testnet \
-  --source $STELLAR_SECRET_KEY \
-  --wasm target/wasm32-unknown-unknown/release/analytics.wasm
-
-# 3. Invoke the admin-gated upgrade entry point with the new WASM hash
-stellar contract invoke \
-  --network testnet \
-  --source $STELLAR_SECRET_KEY \
-  --id <CONTRACT_ID> \
-  -- upgrade \
-  --new_wasm_hash <NEW_WASM_HASH>
-```
-
-### Upgrade checklist
-
-1. Run the contract test suite (`cargo test`) against the new version.
-2. Install the new WASM and record its hash.
-3. Announce the upgrade window to maintainers/operators.
-4. Execute `upgrade` from the admin account.
-5. Verify state is intact and the new entry points behave as expected.
-
-See [`docs/contract-upgrades.md`](./docs/contract-upgrades.md) for the full
-procedure, rollback guidance, and storage-compatibility rules.
+> Full ABI reference with argument types, return values, and invocation examples: [`docs/contract-abi.md`](./docs/contract-abi.md)
 
 ---
 
@@ -281,17 +291,17 @@ See `.env.example` for the full list. Key variables:
 
 ## API Endpoints
 
-All API endpoints are prefixed with `/v1` for versioning.
+All API endpoints are prefixed with `/api/v1` for versioning.
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/auth/register` | Register a new user |
-| POST | `/v1/auth/login` | Login and receive JWT |
+| POST | `/api/v1/auth/register` | Register a new user |
+| POST | `/api/v1/auth/login` | Login and receive JWT |
 
-| GET | `/v1/courses` | List all published courses |
-| GET | `/v1/courses/:id` | Get a single course |
-| GET | `/v1/users/:id` | Get user profile |
-| GET | `/v1/stellar/balance/:publicKey` | Get Stellar account balances |
+| GET | `/api/v1/courses` | List all published courses |
+| GET | `/api/v1/courses/:id` | Get a single course |
+| GET | `/api/v1/users/:id` | Get user profile |
+| GET | `/api/v1/stellar/balance/:publicKey` | Get Stellar account balances |
 
 **Interactive API Documentation:**
 - Local: `http://localhost:3000/api/docs`
@@ -328,4 +338,17 @@ Quick summary:
 
 1. Fork the reposi
 
-/* … truncated 682 chars — edit only what you need near the top … */
+*Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
+
+## Handsoff notes
+
+<!-- handsoff-issue-1009 -->
+- #1009: Nested resource URLs are inconsistent
+<!-- handsoff-issue-984 -->
+- #984: Course completion percentage calculation is incorrect
+
+<!-- handsoff-issue-975 -->
+- #975: BST rewards not rolled back on course unenrollment
+
+<!-- handsoff-issue-977 -->
+- #977: Wallet creation does not store public key in DB

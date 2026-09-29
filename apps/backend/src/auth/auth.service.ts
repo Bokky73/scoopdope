@@ -102,9 +102,59 @@ export class AuthService {
     this.enforceLoginRateLimit(ipAddress);
 
     const user = await this.usersService.findByEmailWithPassword(email);
-    if (!user || !(await bcryptLib.compare(password, user.passwordHash))) {
+    if (!user) {
       await this.auditService.log(AuditAction.LOGIN_FAILURE, null, false, { email }, ipAddress, userAgent);
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check account lockout (#960)
+    if (user.lockoutUntil && new Date(user.lockoutUntil) > new Date()) {
+      const remainingMinutes = Math.ceil(
+        (new Date(user.lockoutUntil).getTime() - Date.now()) / (60 * 1000),
+      );
+      await this.auditService.log(
+        AuditAction.LOGIN_FAILURE,
+        user.id,
+        false,
+        { reason: 'account_locked', remainingMinutes },
+        ipAddress,
+        userAgent,
+      );
+      throw new UnauthorizedException(
+        `Account is temporarily locked due to too many failed login attempts. Please try again in ${remainingMinutes} minute(s).`,
+      );
+    }
+
+    const isPasswordValid = await bcryptLib.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      const MAX_FAILED_ATTEMPTS = 5;
+      const LOCKOUT_MINUTES = 15;
+      const attempts = (user.failedLoginAttempts || 0) + 1;
+      let lockoutDate: Date | null = null;
+      if (attempts >= MAX_FAILED_ATTEMPTS) {
+        lockoutDate = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+      }
+      await this.usersService.updateFailedLoginAttempts(user.id, attempts, lockoutDate);
+      await this.auditService.log(
+        AuditAction.LOGIN_FAILURE,
+        user.id,
+        false,
+        { email, attempts, locked: !!lockoutDate },
+        ipAddress,
+        userAgent,
+      );
+
+      if (lockoutDate) {
+        throw new UnauthorizedException(
+          `Account has been locked for ${LOCKOUT_MINUTES} minutes due to ${MAX_FAILED_ATTEMPTS} consecutive failed login attempts.`,
+        );
+      }
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Reset failed login attempts on successful authentication
+    if (user.failedLoginAttempts > 0 || user.lockoutUntil) {
+      await this.usersService.updateFailedLoginAttempts(user.id, 0, null);
     }
 
     if (user.isBanned) {
@@ -208,7 +258,8 @@ export class AuthService {
       throw new BadRequestException('Too many reset requests. Please wait before trying again.');
     }
 
-    const { token, hash, expiresAt } = this.tokenService.generateOpaqueToken(1);
+    // Enforce 15-minute expiry window on password reset flow (#961)
+    const { token, hash, expiresAt } = this.tokenService.generateOpaqueToken(0.25);
     await this.resetTokenRepo.save(
       this.resetTokenRepo.create({ tokenHash: hash, userId: user.id, expiresAt, used: false }),
     );

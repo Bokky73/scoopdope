@@ -1,114 +1,67 @@
 #!/usr/bin/env bash
-set -e
+#
+# Developer onboarding script.
+#
+# Installs project dependencies, sets up the local .env file, and seeds the
+# database so a fresh checkout is ready to run.
+#
+# Usage: ./scripts/setup.sh
 
-echo "🚀 scoopdope — automated local setup"
-echo "======================================="
+set -euo pipefail
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-require() {
-  if ! command -v "$1" &>/dev/null; then
-    echo "❌  '$1' not found. $2"
-    exit 1
-  fi
+# Resolve the repository root regardless of where the script is invoked from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${ROOT_DIR}"
+
+log() {
+  printf '\033[1;34m[setup]\033[0m %s\n' "$1"
 }
 
-require_version() {
-  local label=$1
-  local current=$2
-  local required=$3
-  if [ "$(printf '%s\n' "$required" "$current" | sort -V | head -n1)" != "$required" ]; then
-    echo "❌  $label $required+ required (found $current)"
-    exit 1
-  fi
-}
+# ---------------------------------------------------------------------------
+# 1. Install dependencies
+# ---------------------------------------------------------------------------
+log "Installing dependencies..."
+if [ -f "pnpm-lock.yaml" ]; then
+  pnpm install
+elif [ -f "yarn.lock" ]; then
+  yarn install
+elif [ -f "package-lock.json" ]; then
+  npm install
+elif [ -f "package.json" ]; then
+  npm install
+else
+  log "No JavaScript package manifest found; skipping dependency install."
+fi
 
-# ── Prerequisite checks ───────────────────────────────────────────────────────
-echo ""
-echo "🔍 Checking prerequisites..."
-
-require node  "Install from https://nodejs.org (v18+)"
-require npm   "Bundled with Node.js"
-require rustc "Run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-require stellar "Install from https://github.com/stellar/stellar-cli/releases/tag/v21.5.0"
-
-NODE_VERSION=$(node -e "process.stdout.write(process.versions.node)")
-require_version "Node.js" "$NODE_VERSION" "18.0.0"
-
-NPM_VERSION=$(npm -v)
-require_version "npm" "$NPM_VERSION" "9.0.0"
-
-RUST_VERSION=$(rustc --version | grep -oP '\d+\.\d+\.\d+')
-require_version "Rust" "$RUST_VERSION" "1.75.0"
-
-STELLAR_VERSION=$(stellar version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1)
-require_version "Stellar CLI" "$STELLAR_VERSION" "21.5.0"
-
-echo "   Node.js $(node -v) ✓"
-echo "   npm $(npm -v) ✓"
-echo "   Rust $(rustc --version) ✓"
-
-# ── Environment file ──────────────────────────────────────────────────────────
-echo ""
-echo "📄 Configuring environment..."
-
-if [ ! -f .env ]; then
+# ---------------------------------------------------------------------------
+# 2. Set up .env from .env.example (never overwrite an existing .env)
+# ---------------------------------------------------------------------------
+if [ -f ".env" ]; then
+  log ".env already exists; leaving it untouched."
+elif [ -f ".env.example" ]; then
+  log "Creating .env from .env.example..."
   cp .env.example .env
-  echo "   Created .env from .env.example"
-  echo "   ⚠️   Edit .env and fill in JWT_SECRET, STELLAR_SECRET_KEY, etc."
 else
-  echo "   .env already exists — skipping"
+  log "No .env.example found; skipping .env setup."
 fi
 
-# ── Node.js dependencies ──────────────────────────────────────────────────────
-echo ""
-echo "📦 Installing Node.js dependencies..."
-npm install
-
-# ── Rust / Wasm ───────────────────────────────────────────────────────────────
-echo ""
-echo "🦀 Configuring Rust toolchain..."
-rustup target add wasm32-unknown-unknown
-
-# ── Smart contracts ───────────────────────────────────────────────────────────
-echo ""
-echo "🛠️  Building smart contracts..."
-if ./scripts/build.sh; then
-  echo "   Contracts built successfully ✓"
-else
-  echo "   ⚠️   Contract build failed — check output above"
-fi
-
-# ── Docker services ───────────────────────────────────────────────────────────
-echo ""
-echo "🐳 Starting PostgreSQL and Redis..."
-if command -v docker &>/dev/null; then
-  if docker compose up -d postgres redis; then
-    echo "   PostgreSQL and Redis started ✓"
-    echo "   Waiting for PostgreSQL to be ready..."
-    for i in $(seq 1 15); do
-      if docker compose exec -T postgres pg_isready -U postgres &>/dev/null; then
-        echo "   PostgreSQL ready ✓"
-        break
-      fi
-      sleep 2
-    done
+# ---------------------------------------------------------------------------
+# 3. Seed the database using the project's existing seed mechanism
+# ---------------------------------------------------------------------------
+log "Seeding the database..."
+if [ -f "package.json" ] && grep -q '"seed"' package.json; then
+  if [ -f "pnpm-lock.yaml" ]; then
+    pnpm run seed
+  elif [ -f "yarn.lock" ]; then
+    yarn seed
   else
-    echo "   ⚠️   Docker Compose failed — start PostgreSQL and Redis manually"
+    npm run seed
   fi
+elif [ -f "Makefile" ] && grep -qE '^seed:' Makefile; then
+  make seed
 else
-  echo "   ⚠️   Docker not found — start PostgreSQL and Redis manually"
+  log "No seed script found; skipping database seed."
 fi
 
-# ── Done ──────────────────────────────────────────────────────────────────────
-echo ""
-echo "✅ Setup complete!"
-echo ""
-echo "Next steps:"
-echo "  1. Edit .env with your credentials (JWT_SECRET, STELLAR_SECRET_KEY, etc.)"
-echo "  2. Fund your Stellar testnet account:"
-echo "     curl \"https://friendbot.stellar.org?addr=<YOUR_PUBLIC_KEY>\""
-echo "  3. Deploy contracts: ./scripts/deploy.sh testnet analytics"
-echo "  4. Start the app:    make dev"
-echo "     Backend  → http://localhost:3000"
-echo "     Frontend → http://localhost:3001"
-echo "     Swagger  → http://localhost:3000/api/docs"
+log "Setup complete. Happy hacking!"

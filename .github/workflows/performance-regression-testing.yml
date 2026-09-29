@@ -256,77 +256,35 @@ jobs:
       - name: Download results
         uses: actions/download-artifact@v4
         with:
-          path: all-results/
+          name: performance-results-${{ github.run_id }}
+          path: current-results/
+        continue-on-error: true
 
-      - name: Generate HTML report
+      - name: Download baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: performance-results-baseline
+          path: baseline-results/
+        continue-on-error: true
+
+      - name: Generate report
         run: |
-          mkdir -p performance-reports
-          
-          cat > performance-reports/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Performance Test Report</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              table { border-collapse: collapse; width: 100%; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #4CAF50; color: white; }
-              .regression { background-color: #ffcccc; }
-              .improvement { background-color: #ccffcc; }
-              .neutral { background-color: #ffffcc; }
-            </style>
-          </head>
-          <body>
-            <h1>Performance Test Report</h1>
-            <p>Generated: $(date)</p>
-            <p>Run ID: ${{ github.run_id }}</p>
-            <table>
-              <tr>
-                <th>Metric</th>
-                <th>Value</th>
-                <th>Status</th>
-              </tr>
-              <tr>
-                <td>P95 Response Time</td>
-                <td>450ms</td>
-                <td class="improvement">✅ Within budget</td>
-              </tr>
-              <tr>
-                <td>P99 Response Time</td>
-                <td>850ms</td>
-                <td class="improvement">✅ Within budget</td>
-              </tr>
-              <tr>
-                <td>Error Rate</td>
-                <td>0.5%</td>
-                <td class="improvement">✅ Within budget</td>
-              </tr>
-              <tr>
-                <td>Throughput</td>
-                <td>150 req/s</td>
-                <td class="improvement">✅ Within budget</td>
-              </tr>
-            </table>
-          </body>
-          </html>
-          EOF
+          echo "# Performance Report" > performance-report.md
+          echo "" >> performance-report.md
+          if [ -f current-results/parsed.json ]; then
+            echo "## Current Results" >> performance-report.md
+            cat current-results/parsed.json >> performance-report.md
+          fi
+          if [ -f baseline-results/parsed.json ]; then
+            echo "" >> performance-report.md
+            echo "## Baseline Results" >> performance-report.md
+            cat baseline-results/parsed.json >> performance-report.md
+          fi
+          cat performance-report.md
 
       - name: Upload report
         uses: actions/upload-artifact@v4
         with:
-          name: performance-report
-          path: performance-reports/
-          retention-days: 90
-
-      - name: Comment with report link
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '📊 [View detailed performance report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})'
-            });
+          name: performance-report-${{ github.run_id }}
+          path: performance-report.md
+          retention-days: 30
