@@ -298,3 +298,8 @@ MIT — see [LICENSE](./LICENSE) for details.
 ---
 
 *Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
+
+## Handsoff notes
+
+<!-- handsoff-issue-993 -->
+- #993: Add course certificate generation
