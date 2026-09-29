@@ -34,6 +34,7 @@ import { InstructorAssignmentService } from './instructor-assignment.service';
 import { InstructorAssignmentController } from './instructor-assignment.controller';
 import { CourseImportService } from './course-import.service';
 import { CourseImportController } from './course-import.controller';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { CourseImportController } from './course-import.controller';
     NotificationsModule,
     MetricsModule,
     AnnouncementsModule,
+    AuditModule,
   ],
   providers: [
     CoursesService,

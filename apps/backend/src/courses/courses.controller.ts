@@ -39,7 +39,10 @@ import { CourseStatus } from './course.entity';
 @ApiTags('courses')
 @Controller('v1/courses')
 export class CoursesController {
-  constructor(private coursesService: CoursesService) {}
+  constructor(
+    private coursesService: CoursesService,
+    private auditService: AuditService,
+  ) {}
 
   @Get()
   @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
@@ -174,8 +177,19 @@ export class CoursesController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
-  create(@Body() data: any) {
-    return this.coursesService.create(data);
+  async create(
+    @Body() data: any,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    const course = await this.coursesService.create(data);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_CREATE,
+      entityType: 'course',
+      entityId: course?.id,
+      metadata: { title: course?.title },
+    });
+    return course;
   }
 
   @Post('import')
@@ -255,27 +269,104 @@ export class CoursesController {
   @ApiOperation({ summary: 'Update a course' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 429, description: 'Too many requests' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
-  @ApiBody({ schema: { example: { title: 'Updated title', description: 'Updated description' } } })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Course not found' })
   @ApiResponse({
     status: 200,
     description: 'Course updated successfully',
     schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
   })
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.coursesService.update(id, data);
+  async update(
+    @Param('id') id: string,
+    @Body() data: any,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    const course = await this.coursesService.update(id, data);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_UPDATE,
+      entityType: 'course',
+      entityId: id,
+      metadata: { changes: data },
+    });
+    return course;
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a course' })
-  @ApiResponse({ status: 200, description: 'Course deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - admin only' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
   @ApiResponse({ status: 404, description: 'Course not found' })
-  remove(@Param('id') id: string) {
-    return this.coursesService.remove(id);
+  @ApiResponse({
+    status: 200,
+    description: 'Course deleted successfully',
+    schema: { example: { data: {}, statusCode: 200, timestamp: '2024-01-01T00:00:00.000Z' } },
+  })
+  async remove(
+    @Param('id') id: string,
+    @Request() req: { user?: { id: string; role: string } },
+  ) {
+    const result = await this.coursesService.remove(id);
+    await this.auditService.log({
+      userId: req.user?.id,
+      action: AuditAction.COURSE_DELETE,
+      entityType: 'course',
+      entityId: id,
+    });
+    return result;
   }
+}
+
+function parseCsv(content: string): Record<string, string>[] {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const headers = splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const rows: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = splitCsvLine(lines[i]);
+    const row: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] ?? '';
+    });
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
 }
