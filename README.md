@@ -144,7 +144,11 @@ scoopdope/
 
 ---
 
-## Prerequisites
+## Getting Started
+
+Follow these steps to run scoopdope locally.
+
+### Prerequisites
 
 | Tool | Version |
 |---|---|
@@ -154,10 +158,6 @@ scoopdope/
 | Rust | v1.75 or higher |
 | Stellar CLI | v21.5.0 |
 | Docker | Optional (for local Stellar testnet) |
-
----
-
-## Quick Start
 
 ### 1. Clone the repository
 
@@ -290,13 +290,64 @@ See `.env.example` for the full list. Key variables:
 
 ## API Endpoints
 
-All API endpoints are prefixed with `/v1` for versioning.
+All API endpoints are prefixed with `/api/v1` for versioning.
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/auth/register` | Register a new user |
-| POST | `/v1/auth/login` | Login and receive JWT |
+| POST | `/api/v1/auth/register` | Register a new user |
+| POST | `/api/v1/auth/login` | Login and receive JWT |
 
-| GET | `/
+| GET | `/api/v1/courses` | List all published courses |
+| GET | `/api/v1/courses/:id` | Get a single course |
+| GET | `/api/v1/users/:id` | Get user profile |
+| GET | `/api/v1/stellar/balance/:publicKey` | Get Stellar account balances |
 
-/* … truncated 1502 chars — edit only what you need near the top … */
+**Interactive API Documentation:**
+- Local: `http://localhost:3000/api/docs`
+- Production: [https://nonso-eze.github.io/scoopdope/](https://nonso-eze.github.io/scoopdope/)
+
+**Versioning Policy:**
+All routes use the `/v1` prefix. For details on breaking-change rules, the deprecation timeline (90-day sunset window), header-based version negotiation, and migration examples, see [`docs/api-versioning.md`](./docs/api-versioning.md).
+
+---
+
+## CI/CD
+
+GitHub Actions workflows in `.github/workflows/` run on every push and PR:
+
+- **Backend**: install → build → test → lint
+- **Frontend**: install → build → lint
+- **Contracts**: `cargo test` → `cargo fmt --check` → `cargo clippy`
+- **API Docs**: auto-deploy Swagger UI to GitHub Pages on push to `main`
+- **Release**: semantic versioning via release-please, auto-generated `CHANGELOG.md`
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributing guide, including:
+
+- Development environment setup
+- Branching conventions (`feature/`, `fix/`, `chore/`, `docs/`, `test/`)
+- Commit message format (Conventional Commits)
+- How to run backend, frontend, and contract test suites
+- Pull-request review process
+
+Quick summary:
+
+1. Fork the reposi
+
+*Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
+
+## Handsoff notes
+
+<!-- handsoff-issue-1009 -->
+- #1009: Nested resource URLs are inconsistent
+<!-- handsoff-issue-984 -->
+- #984: Course completion percentage calculation is incorrect
+
+<!-- handsoff-issue-975 -->
+- #975: BST rewards not rolled back on course unenrollment
+
+<!-- handsoff-issue-977 -->
+- #977: Wallet creation does not store public key in DB
