@@ -14,7 +14,50 @@ The platform combines a modern web frontend, a scalable REST API backend, and a 
 
 ## Architecture
 
-![scoopdope System Architecture](./docs/architecture.svg)
+The diagram below shows how the main components of scoopdope interact: the frontend, the REST API, the PostgreSQL database, the Stellar/Soroban blockchain layer, and the notification subsystem.
+
+```mermaid
+flowchart LR
+    subgraph Client
+        FE["Frontend\n(Next.js 14)"]
+    end
+
+    subgraph Backend["Backend (NestJS REST API)"]
+        API["API / Controllers\n(/v1 routes, JWT + RBAC)"]
+        NOTIF["Notifications\n(email / in-app)"]
+    end
+
+    subgraph Data
+        DB[("PostgreSQL\n(TypeORM)")]
+        CACHE[("Redis\n(cache / sessions)")]
+    end
+
+    subgraph Blockchain["Stellar / Soroban"]
+        ANALYTICS["Analytics Contract\n(on-chain progress)"]
+        TOKEN["Token Contract\n(BST rewards)"]
+        SHARED["Shared Contract\n(RBAC / guards)"]
+    end
+
+    FE -->|REST /v1| API
+    API --> DB
+    API --> CACHE
+    API -->|issue credentials| ANALYTICS
+    API -->|mint rewards| TOKEN
+    ANALYTICS -.-> SHARED
+    TOKEN -.-> SHARED
+    API -->|course / reward events| NOTIF
+    NOTIF -->|email / in-app| FE
+```
+
+**Component responsibilities:**
+
+| Component | Role |
+|---|---|
+| Frontend | Next.js 14 app; wallet integration and learner UI |
+| API | NestJS REST API exposing `/v1` routes with JWT auth and role guards |
+| Database | PostgreSQL via TypeORM for users, courses, and enrollments |
+| Blockchain | Soroban contracts on Stellar for credentials, progress, and token rewards |
+| Notifications | Emits email / in-app notifications on course and reward events |
 
 > Full diagram with data-flow annotations: [`docs/architecture.md`](./docs/architecture.md)
 
@@ -274,27 +317,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributing guide, includ
 
 Quick summary:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) messages
-4. Ensure all CI checks pass
-5. Open a pull request with a detailed description
+1. Fork the reposi
 
----
-
-## Stellar & Soroban Resources
-
-- [Stellar Documentation](https://developers.stellar.org)
-- [Soroban Smart Contracts](https://soroban.stellar.org)
-- [Stellar Laboratory](https://laboratory.stellar.org)
-- [Stellar Discord](https://discord.gg/stellardev)
-
----
-
-## License
-
-MIT — see [LICENSE](./LICENSE) for details.
-
----
-
-*Built with ❤️ on the Stellar network. Inspired by [StrellerMinds](https://github.com/StarkMindsHQ) by StarkMindsHQ.*
+/* … truncated 682 chars — edit only what you need near the top … */
